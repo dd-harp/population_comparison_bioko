@@ -1,0 +1,103 @@
+dolgert@bootstrap:~/dev/popbioko/data/Bioko_grids$ ogrinfo secs.shp secs | head -100
+INFO: Open of `secs.shp'
+      using driver `ESRI Shapefile' successful.
+
+Layer name: secs
+Metadata:
+  DBF_DATE_LAST_UPDATE=2018-12-11
+Geometry: Polygon
+Feature Count: 197086
+Extent: (435458.072900, 354672.814200) - (493205.803600, 418789.220900)
+Layer SRS WKT:
+PROJCS["WGS 84 / UTM zone 32N",
+    GEOGCS["WGS 84",
+        DATUM["WGS_1984",
+            SPHEROID["WGS 84",6378137,298.257223563,
+                AUTHORITY["EPSG","7030"]],
+            AUTHORITY["EPSG","6326"]],
+        PRIMEM["Greenwich",0,
+            AUTHORITY["EPSG","8901"]],
+        UNIT["degree",0.0174532925199433,
+            AUTHORITY["EPSG","9122"]],
+        AUTHORITY["EPSG","4326"]],
+    PROJECTION["Transverse_Mercator"],
+    PARAMETER["latitude_of_origin",0],
+    PARAMETER["central_meridian",9],
+    PARAMETER["scale_factor",0.9996],
+    PARAMETER["false_easting",500000],
+    PARAMETER["false_northing",0],
+    UNIT["metre",1,
+        AUTHORITY["EPSG","9001"]],
+    AXIS["Easting",EAST],
+    AXIS["Northing",NORTH],
+    AUTHORITY["EPSG","32632"]]
+OBJECTID: Real (20.0)
+PageName: String (254.0)
+PageNumber: Integer64 (10.0)
+PageName_1: String (254.0)
+PageNumb_1: Integer64 (10.0)
+FinalGridS: Integer64 (10.0)
+Shape_Leng: Real (24.15)
+Shape_Area: Real (24.15)
+mapaID: String (9.0)
+hayCodiUni: Integer64 (10.0)
+hayViviend: Integer64 (10.0)
+evaluarSec: Integer64 (10.0)
+anadirCasa: Integer64 (10.0)
+equipo: Integer64 (10.0)
+medioKmViv: Integer64 (10.0)
+faltaGPS: Integer64 (10.0)
+
+
+adolgert@bootstrap:~/dev/popbioko/data/Bioko_grids$ ogrinfo mapareas_grid.shp mapareas_grid | head -100
+INFO: Open of `mapareas_grid.shp'
+      using driver `ESRI Shapefile' successful.
+
+Layer name: mapareas_grid
+Metadata:
+  DBF_DATE_LAST_UPDATE=2019-05-06
+Geometry: Polygon
+Feature Count: 3894
+Extent: (435449.391500, 353872.083400) - (494404.979300, 419501.444600)
+Layer SRS WKT:
+PROJCS["WGS 84 / UTM zone 32N",
+    GEOGCS["WGS 84",
+        DATUM["WGS_1984",
+            SPHEROID["WGS 84",6378137,298.257223563,
+                AUTHORITY["EPSG","7030"]],
+            AUTHORITY["EPSG","6326"]],
+        PRIMEM["Greenwich",0,
+            AUTHORITY["EPSG","8901"]],
+        UNIT["degree",0.0174532925199433,
+            AUTHORITY["EPSG","9122"]],
+        AUTHORITY["EPSG","4326"]],
+    PROJECTION["Transverse_Mercator"],
+    PARAMETER["latitude_of_origin",0],
+    PARAMETER["central_meridian",9],
+    PARAMETER["scale_factor",0.9996],
+    PARAMETER["false_easting",500000],
+    PARAMETER["false_northing",0],
+    UNIT["metre",1,
+        AUTHORITY["EPSG","9001"]],
+    AXIS["Easting",EAST],
+    AXIS["Northing",NORTH],
+    AUTHORITY["EPSG","32632"]]
+OBJECTID: Real (20.0)
+PageName: String (254.0)
+PageNumber: Integer64 (10.0)
+Map_Status: String (50.0)
+Shape_Leng: Real (24.15)
+Shape_Area: Real (24.15)
+mean: Real (24.15)
+min: Real (24.15)
+max: Real (24.15)
+m_count: Real (24.15)
+m_sum: Real (24.15)
+m_mean: Real (24.15)
+m_min: Real (24.15)
+m_max: Real (24.15)
+____count: Real (24.15)
+____sum: Real (24.15)
+____mean: Real (24.15)
+____min: Real (24.15)
+____max: Real (24.15)

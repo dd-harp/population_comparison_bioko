@@ -1,0 +1,1365 @@
+---
+title: "The Accuracy of Human Population Density Maps : Detailed Methods"
+author: "David L Smith, Carlos Guerra, Andrew Dolgert, Brendan Fries"
+date: "9/18/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## How Accurate is a Map? 
+
+If someone handed you a map, 
+
+## Setup
+
+```{r, echo=FALSE}
+##### LOAD THE DATA IMAGE
+require(plotrix)
+require(dplyr)
+rm(list = ls())
+load('popData_image.RData')
+load('pfpr_pops.RData')
+popk$pop1k<-ifelse(is.na(popk$pop1k),0,popk$pop1k)
+popm$pop100<-ifelse(is.na(popm$pop100),0,popm$pop100)
+
+maps1k = list("BIMEP" = popk$pop1k, "HRSL" = popk$popfb,  "Landscan" = popk$lspop, "WorldPOP"=popk$wppop)
+maps100m = list("BIMEP" = popm$pop100, "HRSL" = popm$popfb, "WorldPOP"=popm$wppop)
+
+```
+
+```{r, echo=FALSE}
+##### SET GENERAL COLOR SCHEME
+require(viridis)
+col<-plasma(8,alpha=1, begin=0, end=1)
+# BIMEP    = col[1]
+gsclr = col[1]
+# WorldPOP = col[3]
+wpclr = col[3]
+# Landscan = col[5]
+lsclr = col[5]
+# HRSL     = col[7]
+fbclr = col[7]
+gry = grey(0.7)
+
+str2 = c("1", "2", "4", "8", expression(2^4),
+         expression(2^5),expression(2^6),expression(2^7),
+         expression(2^8),expression(2^9),expression(2^10),
+         expression(2^11),expression(2^12),expression(2^13),
+         expression(2^14),expression(2^15),expression(2^16),
+         expression(2^17),expression(2^18),expression(2^19))
+
+str10 = c("1", "10", "100", "1,000", expression(10^4),
+          expression(10^5),expression(10^6))
+```
+
+## Population Density
+
+The population density per $km^2$ must be computed for the 100 meter maps. Every pixel has a positive population density, so we create objects to hold the mapped population densities.  
+```{r}
+###### COMPUTE THE POPULATION DENSITY
+sectors = data.frame(read.csv2("popm.csv", header=T, sep = ",", as.is=TRUE)) 
+sectors$xcoord = as.numeric(sectors$xcoord)
+sectors$ycoord = as.numeric(sectors$ycoord)
+sectors$pd1km = sectors$xcoord*0
+
+getPD = function(i, D=1000/sqrt(pi)){
+  with(as.list(sectors),{
+    dst = sqrt((xcoord[i]-xcoord)^2 + (ycoord[i]-ycoord)^2)
+    ix = which(dst<=D)
+    aa = sum(pop100[ix])
+    bb = sum(as.double(wppop[ix]))
+    cc = sum(as.double(popfb[ix]))
+    c(aa,bb,cc)
+  })}
+
+#This is a time consuming computation, so we don't want to redo it. 
+if(!exists("popd")) popd = sapply(1:194090, getPD)
+
+dpop100 = ddpop100 = popd[1,]
+ix = which(sectors$pop100==0)
+ddpop100[ix] = 0 
+dwppop = ddwppop= popd[2,]
+ix = which(as.double(sectors$wppop)==0)
+ddwppop[ix] = 0 
+dpopfb = ddpopfb = popd[3,]
+ix = which(as.double(sectors$popfb)==0)
+ddpopfb[ix] = 0 
+```
+
+
+
+
+## Basic Stats
+
+```{r}
+MaxPopDens = round(
+c(max(maps1k[[1]]), 
+max(maps1k[[2]]), 
+max(maps1k[[3]]),
+max(maps1k[[4]]),
+max(ddpop100), 
+max(ddpopfb),
+max(ddwppop)))
+```
+
+```{r}
+Tot = round(c(sum(maps1k[[1]]), 
+sum(maps1k[[2]]), 
+sum(maps1k[[3]]),
+sum(maps1k[[4]]),
+sum(maps100m[[1]]),
+sum(maps100m[[2]]),
+sum(maps100m[[3]])))
+```
+
+
+```{r}
+emptyFrac = function(H){
+  ix = which(H==0)
+  P = length(ix)/length(H)
+  round(1000*P)/10
+}
+
+Emp = c(emptyFrac(maps1k[[1]]), 
+emptyFrac(maps1k[[2]]), 
+emptyFrac(maps1k[[3]]),
+emptyFrac(maps1k[[4]]),
+emptyFrac(maps100m[[1]]),
+emptyFrac(maps100m[[2]]),
+emptyFrac(maps100m[[3]])) 
+```
+
+```{r}
+ParetoFraction = function(H){
+ H = sort(H)
+ HH = cumsum(H)/sum(H)
+ L = length(H)
+ X = c(L:1)/L
+ P=X[min(which(X<HH))]
+ Q = round(100*P)
+ ans = paste(100-Q,":",Q, sep="")
+ return(ans)
+}
+
+for(i in 1:length(maps1k))
+  ParetoFraction(maps1k[[i]])
+
+PF = c(ParetoFraction(maps1k[[1]]), 
+ParetoFraction(maps1k[[2]]), 
+ParetoFraction(maps1k[[3]]),
+ParetoFraction(maps1k[[4]]),
+ParetoFraction(maps100m[[1]]),
+ParetoFraction(maps100m[[2]]),
+ParetoFraction(maps100m[[3]]))
+PF
+```
+
+```{r}
+urbanFrac = function(H){
+  ix = which(H>=1000)
+  P = length(ix)/length(H)
+  round(1000*P)/10
+}
+
+Urb = c(urbanFrac(maps1k[[1]]), 
+urbanFrac(maps1k[[2]]), 
+urbanFrac(maps1k[[3]]),
+urbanFrac(maps1k[[4]]),
+urbanFrac(ddpop100),
+urbanFrac(ddpopfb),
+urbanFrac(ddwppop))
+```
+
+```{r}
+mapNames = c("BIMEP 1k", "HRSL 1k", "Landscan 1k", "WorldPop 1k", "BIMEP 100m", "HRSL 100m", "WorldPop 100m")
+BasicStats = data.frame(Total=Tot, MaxPopDens=MaxPopDens,  Empty=Emp, Urban=Urb, ParetoFraction=PF, row.names = mapNames)
+BasicStats
+```
+
+```{r}
+t(BasicStats)
+```
+
+```{r}
+vv = popm$popfb[152]
+A = round(popm$popfb/vv)
+sort(unique(round(popm$popfb/vv)))
+```
+```{r}
+B = vv*A-popm$popfb
+ix = which(B>0)
+unique(popm$popfb[ix])
+```
+```{r}
+9.796294*3*c(1:5)
+```
+
+```{r}
+unique(popm$wppop)
+```
+
+
+## Scatter Plots
+```{r}
+ff1 = function(x,offset=0){log(1+x+offset)}
+
+scatter1k.add = function(yy, cid=5, ff=ff1, offset = 0, cx =.7){
+  points(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch =19, cex=cx) 
+}
+
+scatter1k = function(yy, cid=5, ff=ff1, offset=0,cx=.7, lgn = FALSE, tl="", xlb = "BIMEP Population Density"){
+  mx = max(popk$lspop)*1.01
+  plot(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19, xlim = ff(c(0,mx)), ylim = ff(c(0,mx)), xaxt = "n", yaxt="n", xlab = xlb, ylab = "Mapped Population Density", cex=cx, main = tl)
+  axis(1, ff(10^c(0:5)), 10^c(0:5))
+  axis(2, ff(10^c(0:5)), 10^c(0:5))
+  segments(ff(0), ff(0), ff(10^5), ff(10^5))
+  segments(ff(1), ff(1), ff(1), ff(10^5), col = grey(0.7))
+  segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
+  scatter1k.add(yy,cid,ff,offset,cx)
+  if(lgn==TRUE)
+  legend('topleft', legend =  c('HRSL', 'Landscan', 'WorldPop'), col=col[c(7,5,3)],
+         lty=1, lwd=2, cex=1, bg = "white", bty = "n")
+}
+
+scatter100m = function(yy, gold=ddpop100, clr = gry, ff=ff1, offset=0,cx=.7, lgn = FALSE, tl="", xlb = "BIMEP Population Density", ylb = "Population Density"){
+  mx = max(gold)*1.01
+  plot(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, xlim = ff(c(0,mx)), ylim = ff(c(0,mx)), xaxt = "n", yaxt="n", xlab = xlb, ylab = ylb, cex=cx, main = tl)
+  axis(1, ff(10^c(0:5)), 10^c(0:5))
+  axis(2, ff(10^c(0:5)), 10^c(0:5))
+  segments(ff(0), ff(0), ff(10^5), ff(10^5))
+  segments(ff(1), ff(1), ff(1), ff(10^5), col = grey(0.7))
+  segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
+
+  scatter100m.add(yy,gold,clr,ff,offset,cx)
+  if(lgn==TRUE)
+  legend('topleft', legend =  c('HRSL', 'Landscan', 'WorldPop'), col=col[c(7,5,3)],
+         lty=1, lwd=2, cex=1, bg="white", box.col="white")
+}
+
+scatter100m.add = function(yy, gold=ddpop100, clr = gry, ff=ff1, offset = 0, cx =.7){
+  points(ff(gold,offset), ff(yy,offset), col = clr, pch =15, cex=cx) 
+}
+```
+
+```{r, fig.height=6, fig.width=6}
+wpclr = col[3]
+gry = grey(0.8)
+scatter1kFigure = function(){
+cxx=.5
+par(mfrow = c(3,2), mar = c(5,4.2,3,2))
+scatter1k(popk$lspop,cx=cxx, lgn=TRUE, tl="A")
+scatter1k.add(popk$popfb, cid=7,cx=cxx)
+scatter1k.add(popk$wppop, cid=3,cx=cxx)
+scatter100m.add(ddwppop, clr=wpclr, cx=cxx/2)
+scatter100m.add(ddpopfb, clr=fbclr, cx=cxx/2)
+scatter1k(popk$lspop,cx=cxx, tl="B) Landscan")
+scatter1k(popk$popfb, cid=7,cx=cxx,tl="C) HRSL",lgn=FALSE)
+scatter100m.add(ddpopfb, clr=gry, cx=cxx/2)
+scatter1k.add(popk$popfb, cid=7,cx=cxx)
+scatter1k(popk$wppop, cid=3,cx=cxx, tl="D) WorldPOP")
+scatter100m.add(ddwppop, clr=gry, cx=cxx/2)
+scatter1k.add(popk$wppop, cid=3,cx=cxx)
+scatter100m(popm$popfb, gold=popm$pop100, xlb="BIMEP 100x100 m", ylb = "Population Size", clr=fbclr,cx=cxx/2, tl="E) HRSL, 100x100 m")
+scatter100m(popm$wppop, gold=popm$pop100, xlb="BIMEP 100x100 m", ylb = "Population Size", clr=wpclr,cx=cxx/2, tl = "F) WP, 100x100 m")
+}
+
+
+scatter1kFigure() 
+
+#points(ff(popk$pop1k), ff(popk$popfb), col = col[7], pch = 15)
+#points(ff(popk$pop1k), ff(popk$wppop), col = col[3], pch = 17)
+
+```
+
+```{r}
+pdf("scatter1k.pdf", height=12, width=9)
+scatter1kFigure() 
+a=dev.off(dev.cur())
+```
+
+
+
+```{r}
+summary(lm(popk$lspop~popk$pop1k))
+```
+
+```{r}
+summary(lm(popk$popfb~popk$pop1k))
+```
+
+```{r}
+summary(lm(ddpopfb~ddpop100))
+```
+```{r}
+summary(lm(popm$popfb~popm$pop100))
+```
+
+
+```{r}
+summary(lm(popk$wppop~popk$pop1k))
+```
+
+```{r}
+summary(lm(popm$wppop~popm$pop100))
+```
+
+```{r}
+summary(lm(ddwppop~ddpop100))
+```
+
+
+
+```{r}
+summary(lm(popk$pop1k~popk$wppop+popk$popfb+popk$lspop))
+```
+
+```{r}
+summary(lm(popk$pop1k~popk$popfb+popk$lspop))
+```
+
+```{r}
+mod2 = lm(popk$pop1k~popk$popfb+popk$lspop+0)
+summary(mod2)
+
+newMap = mod2$fitted.values
+```
+
+## Measuring the Accuracy of Maps
+
+We would like to develop some metrics to measure the accuracy of maps. We start by reading in the data. 
+
+## Population by Area 
+
+```{r}
+cdfAreaPlot = function(H, clr ="black", llwd=2, lt=1, lb=""){
+  H = sort(H)
+  CDF = cumsum(H)
+  area =  c(1:length(H))/length(H)
+  plot(area, cumsum(H)/sum(H), type = "l", xlab =  "% Area", ylab =  "Proportion of Population", 
+       main = lb, lwd=llwd, col = clr, lty = lt)
+}
+
+cdfAreaLines = function(H, clr ="black", llwd=2, lt=1){
+  H = sort(H)
+  CDF = cumsum(H)
+  area =  c(1:length(H))/length(H)
+  lines(area, cumsum(H)/sum(H), col = clr, lwd=llwd, lty = lt)
+}
+```
+
+
+
+```{r}
+cdfAreaFigure = function(llwd=1, lb=""){ 
+  cdfAreaPlot(popk$pop1k, clr = col[1], llwd=llwd, lb=lb)
+  cdfAreaLines(popm$pop100, clr = col[1], llwd=llwd, lt = 2)
+  cdfAreaLines(popk$wppop, clr = col[3], llwd=llwd)
+  cdfAreaLines(popm$wppop, clr = col[3], llwd=llwd, lt = 2)
+  cdfAreaLines(popk$lspop, clr = col[5], llwd=llwd)
+  cdfAreaLines(popk$popfb, clr = col[7], llwd=llwd)
+  cdfAreaLines(popm$popfb, clr = col[7], llwd=llwd, lt = 2)
+  #cdfAreaLines(dpop100, clr = "pink", llwd=2*llwd, lt = 2)
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
+         lty=1, lwd=2, cex=1)
+}
+
+cdfAreaFigure(2)
+```
+
+How does the smoothed surface compare with the $1\;km$ surface? I 
+```{r}
+SmoothFigure = function(llwd=1, lb=""){ 
+  cdfAreaPlot(popk$pop1k, clr = "blue", llwd=llwd, lb=lb, lt=3)
+  cdfAreaLines(dpop100, clr = "pink", llwd= llwd, lt = 2)
+  cdfAreaLines(popm$pop100, clr = "red", llwd=llwd, lt = 2)
+  cdfAreaLines(popk$pop1k, clr = "black", llwd=llwd, lt = 3)
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
+         lty=1, lwd=2, cex=1)
+}
+SmoothFigure(2)
+
+```
+
+
+
+
+## Population by Area 
+
+```{r}
+
+cdfDens = function(H, pw=2){
+  H = sort(H)
+  mx = ceiling(log(max(H), base=pw))
+  #print(c(mx=mx,pw=pw))
+  #browser() 
+  c2 = 1:mx
+  ixz = which(H==0)
+  Pz = length(ixz)
+  for(i in c2){
+    ix = which(H<pw^i) 
+    Pz = c(Pz,sum(H[ix]))
+  }
+  pop = c(0, pw^c2)
+  cbind(pop, Pz)
+}
+
+cdfDensPlot = function(H, pw=2, clr="black", llwd=2, lt=1, lb=""){
+  H = sort(H)
+  dd = cdfDens(H,pw)[-1,]
+  P = dd[,1]
+  H = dd[,2]
+  l = log10(max(H))
+  plot(P, H/max(H), log = "x", type = "l", xlab = "log(Pop Dens)", xaxt="n", ylab = "Proportion of Population", main = lb, col = clr, lwd=llwd, lty=lt)
+  #axis(1, 10^(0:l)+0.5, 10^c(0:l))
+  axis(1, 10^(0:(l+1))+0.5, str10[1:(l+2)])
+}
+
+cdfDensLines = function(H, pw=2, clr="black", llwd=2, lt=1){
+  dd = cdfDens(H,pw)[-1,]
+  P = dd[,1]
+  H = dd[,2]
+  l = log10(max(H))
+  lines(P, H/max(H), col = clr, lwd=llwd, lty=lt)
+}
+
+cdfDensFigure = function(llwd=1,lb=""){ 
+  cdfDensPlot(popk$lspop, pw=2, clr = col[5], llwd=llwd,lb=lb)
+  cdfDensLines(ddpop100, pw=2, clr = col[1], llwd=llwd, lt = 2)
+  cdfDensLines(popk$pop1k, pw=2, clr = col[1], llwd=llwd)
+  cdfDensLines(popk$wppop, pw=2,  clr = col[3], llwd=llwd)
+  cdfDensLines(ddwppop, pw=2,  clr = col[3], llwd=llwd, lt = 2)
+
+  cdfDensLines(popk$popfb, pw=2,  clr = col[7], llwd=llwd)
+  cdfDensLines(ddpopfb, pw=2,  clr = col[7], llwd=llwd, lt = 2)
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
+         lty=1, lwd=2, cex=1)
+}
+
+cdfDensFigure(2)
+```
+
+```{r}
+landAA =  function(H, rural1=50, rural2 = 250, urban=1000, area=1){
+  ixz = which(H==0)
+  Pz = length(ixz)
+  HH = H[-ixz]
+  
+  ixz = which(HH < rural1/area)
+  if(length(ixz>0)){
+    Pz = c(Pz, length(ixz))
+    HH = HH[-ixz]
+  } else {
+    Pz = c(Pz,0)
+  }
+  
+  ixz = which(HH < rural2/area)
+  if(length(ixz>0)){
+    Pz = c(Pz, length(ixz))
+    HH = HH[-ixz]
+  } else {
+    Pz = c(Pz,0)
+  }
+  
+  ixz = which(HH < urban/area)
+  Pz = c(Pz, length(ixz))
+  HH = HH[-ixz]
+  
+  c(Pz, length(HH))
+}
+
+pdfAreaPlot = function(H, rural1=50, rural2=250, urban=1000, area=1, llwd=3, lt=1, clr = "black", offset=0, lb=""){
+  Pz = landAA(H, rural1, rural2, urban, area)/length(H)
+  plot(2:6 + offset, Pz, ylim = c(0, 1), xaxt = "n",  ylab = "Proportion",
+  #plot(2:6 + offset, sqrt(Pz), ylim = c(0, 1), xaxt = "n", yaxt = "n", ylab =  expression(sqrt(Proportion)),
+       xlim = c(1,7), type = "h", lwd=llwd, col=clr, lty=lt, xlab =  "", main = lb)
+  axis(1, c(2, 2:5 + 0.5), c(0,1,50,250,1000))
+  xx = c(.01, .1, .2, .5, .75) 
+  #axis(2, sqrt(xx), xx)
+  #axis(2, xx, xx)
+  #axis(2, sqrt(c(.01, .05, .2, .5)), c("1%", "5%", "20%", "50%"))
+  
+  
+  makebox = function(x1,x2){
+    xx = c(x1, x1, x2, x2)
+    yy = c(0,1,1,0)
+    cbind(xx,yy)
+  }
+  polygon(makebox(5.5,6.5), border = NA, col = "aliceblue")
+  polygon(makebox(4.5,5.5), border = NA, col = "cornsilk")
+  polygon(makebox(3.5,4.5), border = NA, col = "lavender")
+  polygon(makebox(2.5,3.5), border = NA, col = "ivory")
+  polygon(makebox(1.5,2.5), border = NA, col = grey(0.95))
+  
+  #for (i in xx){
+  #  segments(1,sqrt(i),7,sqrt(i), col = grey(0.7))
+  #}
+  
+}
+
+pdfAreaLines = function(H, rural1=100, rural2=250, urban=1000, area=1, llwd=3, lt=1, clr = "black", offset=0){
+  Pz = landAA(H, rural1, rural2, urban, area)/length(H)
+  #lines(2:6 + offset, sqrt(Pz), type = "h", lwd=llwd, col=clr, lty=lt)
+  lines(2:6 + offset, Pz, type = "h", lwd=llwd, col=clr, lty=lt)
+}
+
+pdfAreaFigure = function(lb = ""){ 
+  pdfAreaPlot(popk$pop1k, llwd=5, clr = col[1], offset=-.21, lb=lb)
+  pdfAreaLines(popk$pop1k, llwd=5, clr = col[1], offset=-0.21)
+  #pdfAreaLines(popm$pop1k, llwd=4, clr = col[1], offset=-.2, area=0.01, lt=5) ### REMOVING 100m BARS FOR NOW
+  pdfAreaLines(popk$wppop, llwd=5, clr = col[3], offset=0.21)
+  #pdfAreaLines(popm$wppop, llwd=4, clr = col[3], offset=0, area=0.01, lt=5) ### REMOVING 100m BARS 
+  pdfAreaLines(popk$lspop, llwd=5, clr = col[5], offset=.07)
+  pdfAreaLines(popk$popfb, llwd=5, clr = col[7], offset=-.07)
+  #pdfAreaLines(popm$popfb, llwd=4, clr = col[7], offset=.3, area=0.01, lt=5) ### REMOVING 100m BARS
+  legend('topright', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
+         lty=1, lwd=2, cex=1, bg="white")
+}
+
+pdfAreaFigure() 
+
+pdf("AccuracyProfile.pdf", height=8, width=9)
+par(mar = c(5,5,3,2))
+pdfAreaFigure() 
+a=dev.off(dev.cur())
+```
+
+
+```{r}
+
+landAA1 = function(H, pw=2){
+  pwmx = ceiling(log(max(popk$lspop), base=pw))
+  bk=c(0, 2^c(0:pwmx))
+  hist(H, breaks=bk, plot=FALSE)$counts
+}
+
+
+pdfAreaPlot1 = function(H, pw=2, llwd=3, lt=1, clr = "black", lb="", offset=0){
+  pwmx = ceiling(log(max(popk$lspop), base=pw))
+  Pz = landAA1(H, pw)
+  pws = c(0:pwmx)
+  bk=c(2^pws)
+  plot(pws[-1], Pz[-1], type = "l", col = clr, main = lb, lwd=llwd, lty=lt)
+}
+
+pdfAreaLines1 = function(H, pw=2, llwd=3, lt=1, clr = "black", offset=0){
+  pwmx = ceiling(log(max(popk$lspop), base=pw))
+  Pz = landAA1(H, pw)
+  pws = c(0:pwmx)
+  bk=c(2^pws)
+  lines(pws[-1], Pz[-1], type = "l", col = clr, lwd=llwd, lty=lt)
+}
+
+```
+
+```{r}
+pdfAreaPlot1(popk$wppop, pw=1.15, clr=col[1])
+pdfAreaLines1(popk$pop1k, pw=1.15, clr=col[3])
+pdfAreaLines1(popk$lspop, pw=1.15, clr=col[5])
+pdfAreaLines1(popk$popfb, pw=1.15, clr=col[7])
+
+```
+
+
+
+```{r}
+pdfAreaFigure1 = function(ppw=2, pwmx=15, lld = 3, llt=3, ymx=0.4, lb=""){ 
+  pdfAreaPlot1(popk$lspop, pw=ppw, clr = col[5], llwd=lld, lb=lb)
+  pdfAreaLines1(popk$pop1k, pw=ppw, clr = col[1], llwd=lld)
+  pdfAreaLines1(ddpop100, pw=ppw, clr = col[1], llwd=lld+1, lt = llt)
+  pdfAreaLines1(ddpop100, pw=ppw, clr = col[1])
+  pdfAreaLines1(popk$wppop, pw=ppw,  clr = col[3], llwd=lld)
+  pdfAreaLines1(ddwppop, pw=ppw,  clr = col[3], llwd=lld+1, lt = llt)
+  pdfAreaLines1(ddwppop, pw=ppw,  clr = col[3])
+  pdfAreaLines1(popk$popfb, pw=ppw,  clr = col[7], llwd=lld)
+  pdfAreaLines1(ddpopfb, pw=ppw,  clr = col[7], llwd=lld+1, lt = llt)
+  pdfAreaLines1(ddpopfb, pw=ppw,  clr = col[7])
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
+         lty=1, lwd=2, cex=1)
+}
+pdfAreaFigure1(1.2,2,3) 
+
+```
+
+
+
+```{r}
+logDD = function(H, pw=2){
+  c2 = ceiling(max(log(H, base=pw)))
+  ixz = which(H==0)
+  upper = 0
+  HH = H[-ixz]
+  Pz = length(ixz)
+  for(i in 1:c2){
+    upper = c(upper,pw^(i-1))
+    ix = which(HH<pw^(i-1))
+    if(length(ix)>0){
+      Pz = c(Pz,sum(HH[ix]))
+      HH = HH[-ix]
+    } else {
+      Pz = c(Pz,0)
+    }
+  }
+  while(Pz[length(Pz)] == 0){
+    Pz = Pz[-length(Pz)]
+    upper = upper[-length(Pz)]
+  }
+  cbind(round(Pz), upper)
+}
+
+pdfDensPlot = function(H, pw=2, clr="black", llwd=1, lt = 1, offset=0){
+  D = logDD(H,pw)[-1,1]
+  l = length(D)
+  L = ceiling(log10(pw^l))
+  
+  plot(pw^(c(1:l)-0.5), D/sum(H), xaxt = "n", log = "x", ylab = "Proportion of Population", xlab = "log(Pop Dens)", 
+       type = "s", xlim = c(1, pw^(l+1)), lwd=llwd, ylim = c(0,1), col = clr, 
+       main = "D", lty = lt)
+  lines(pw^c(c(1:(l+1))+0.5), c(D/sum(H),0), type = "S", col = clr, lwd=llwd)  
+  #lines(pw^c(c(1:(l+1))+0.5), c(D/sum(H),0), type = "S", col = clr, lwd=llwd)
+  
+  axis(1, 10^(0:(L+1))+0.5, str10[1:(L+2)])
+  #ix = 1:(l+1)
+  #axis(3, 2^(ix-0.5), str2[ix])
+}
+
+pdfDensLines = function(H, pw=2, clr = "black", llwd = 1, lt=1, offset=0){
+  D = logDD(H,pw)[-1,1]
+  l = length(D)
+  L=ceiling(log10(pw^l))
+  
+  lines(pw^(c(1:l)-0.5)+2^offset, D/sum(H), type = "s", lwd=llwd, col = clr, lty=lt)
+  lines(pw^c(c(1:(l+1))+0.5)+2^offset, c(D/sum(H),0), type = "S", col = clr, lwd=llwd, lty=lt)  
+  
+}
+
+
+```
+
+```{r}
+pdfDensPlot1 = function(H, pw=2, clr="black", llwd=1, lt=1, offset=0, lb="", ymx=0.4){
+  D = logDD(H,pw)[-1,1]
+  l = length(D)
+  
+  L=ceiling(log10(pw^l))
+  
+  plot(pw^c(c(1:(l+1)))*pw^offset, c(D/sum(H),0), xaxt = "n", log = "x", ylab = "Proportion of Population", xlab = "log(Pop Dens)", 
+       type = "l", xlim = c(5, pw^(l+2)), lwd=llwd, ylim = c(0,ymx), col = clr, lty=lt, 
+       main = lb)
+  #lines(pw^c(c(1:(l+1))), c(D/sum(H),0), type = "s", lwd = llwd, col = clr, lty=lt)
+  axis(1, 10^(0:(L+1))+0.5, str10[1:(L+2)])
+  #ix = 1:(l+1)
+  #axis(3, 2^(ix-0.5), str2[ix])
+}
+
+pdfDensLines1 = function(H, pw=2, clr = "black", llwd = 1, lt=1, offset=0){
+  D = logDD(H,pw)[-1,1]
+  l = length(D)
+  lines(pw^c(c(1:(l+1)))*pw^offset, c(D/sum(H),0), type = "l", lwd = llwd, col = clr, lty=lt)
+  #lines(pw^c(c(1:(l+1))), c(D/sum(H),0), type = "s", lwd = llwd, col = clr, lty=lt)
+}
+
+pdfDensFigure = function(ppw=10, lld = 3, llt=3, ymx=0.4,lb=""){ 
+  pdfDensPlot1(popk$lspop, pw=ppw, clr = col[5], llwd=lld, ymx=ymx,lb=lb)
+  pdfDensLines1(popk$pop1k, pw=ppw, clr = col[1], llwd=lld)
+  pdfDensLines1(ddpop100, pw=ppw, clr = col[1], llwd=lld+1, lt = llt)
+  pdfDensLines1(ddpop100, pw=ppw, clr = col[1])
+  pdfDensLines1(popk$wppop, pw=ppw,  clr = col[3], llwd=lld)
+  pdfDensLines1(ddwppop, pw=ppw,  clr = col[3], llwd=lld+1, lt = llt)
+  pdfDensLines1(ddwppop, pw=ppw,  clr = col[3])
+  pdfDensLines1(popk$popfb, pw=ppw,  clr = col[7], llwd=lld)
+  pdfDensLines1(ddpopfb, pw=ppw,  clr = col[7], llwd=lld+1, lt = llt)
+  pdfDensLines1(ddpopfb, pw=ppw,  clr = col[7])
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
+         lty=1, lwd=2, cex=1)
+}
+pdfDensFigure(1.2,2,3) 
+
+```
+
+
+```{r, fig.height=5, fig.width=3.5}
+cdfFigure = function(){
+  par(mfrow=c(3,1), mar = c(5,5,3,2))
+  cdfAreaFigure(2, lb="A")
+  cdfDensFigure(2, lb="B")
+  pdfDensFigure(1.2,2,2,0.4, lb="C")
+}
+
+cdfFigure() 
+
+pdf("CDF.pdf", height = 8, width = 4.5)
+cdfFigure() 
+a = dev.off(dev.cur())
+```
+
+
+
+### Classification Metrics
+
+One measure of the accuracy of maps is whether it puts land area in to the correct category. Two obvious categories are "empty" or "urban," which are defined as having exactly zero people (or below a threshold), or having a population density above a threshold. Various categories of rural are possible as is any range with a defined minimum and maximum value. One advantage of classification algorithms is that a classification is either correct or not, and there are some well developed ways of reporting this information: 
+\begin{table}[ht]
+\begin{tabular}{l||c|c}
+  & + & - \\ \hline \hline
++ & TP : in category, categorized correctly & FN: in category, categorized incorrectly \\ \hline  
+- & FP : not in category, categorized incorrectly & TN: not in category, categorized correctly
+\end{tabular} 
+\end{table}
+Given a gold standard, it is possible to assign any map a value of sensitivity, specificity, positive predictive value, and negative predictive value. 
+\begin{itemize}
+\item Accuracy = $(TP+TN)/(TP+TN+FP+FN)$ is the proportion correctly categorized. 
+\item Sensitivity / Recall = $TP/(TP+FN)$ is the proportion correctly categorized as belonging to a class. 
+\item Positive Predictive Value / Precision = $TP/(TP+FP)$ is the proportion of those assigned to a class that belonged to the class. 
+\item Specificity = $TN/(TN+FP)$ is the proportion correctly categorized as not belonging to a class. 
+\item Negative Predictive Value = $TN/(TN+FN)$ is the proportion of those not assigned to a class that did not belong to the class. 
+\end{itemize}
+
+The following functions in compute the specificity and sensitivy of a map compared with a gold standard: 
+```{r}
+catSum = function(TP, FN, FP, TN, dgt=4){
+  #####################
+  # TP = True Positive
+  # FN = False Negative
+  # FP = False Positive
+  # TN = True Negative 
+  #####################
+  profile = c(
+     acc  = ifelse(TP+TN==0,0,(TP+TN)/(TP+TN+FN+FP)),
+     sens = ifelse(TP+FN==0, 0, TP/(TP+FN)),
+     spec =  ifelse(TN+FP==0, 0, TN/(TN+FP)),
+     ppv  = ifelse(TP+FP==0, 0, TP/(TP+FP)),
+     npv  = ifelse(TN+FN==0, 0, TN/(TN+FN)))
+as.list(TP=TP,FN=FN, FP=FP,TN=TN, tot=TP+FN+FP+TN, signif(profile,dgt))
+}
+
+
+lessThanCat = function(tau, map, gold, km2=1, dgt=4){
+  tau = tau*km2
+  TP =  sum(gold <= tau & map <= tau)
+  FN =  sum(gold <= tau & map > tau)
+  FP =  sum(gold > tau & map <= tau)
+  TN =  sum(gold > tau & map > tau)
+  catSum(TP,FN,FP,TN, dgt)
+}
+  
+greaterThanCat = function(tau, map, gold, km2=1, dgt=4){
+  tau = tau*km2
+  TP =  sum(gold >= tau & map >= tau) # True Positive
+  FN =  sum(gold >= tau & map < tau)  # False Negative
+  FP =  sum(gold < tau & map >= tau)  # False Positive
+  TN =  sum(gold < tau & map < tau)   # True Negative
+  catSum(TP, FN, FP, TN, dgt)
+}
+
+betweenCat = function(L, U, map, gold, km2=1, dgt=4){
+  L = L*km2
+  U = U*km2
+  TP =  sum(gold > L & gold <= U & map > L & map <= U)
+  FN =  sum(gold > L & gold <= U & (map <= L | map > U))
+  FP =  sum((gold <= L | gold > U) & map > L & map <= U)
+  TN =  sum((gold <= L | gold > U) & (map <= L | map > U))
+  catSum(TP,FN,FP,TN, dgt)
+}
+
+fullCat = function(E, E1, R1, R2, U, map, gold, km2=1, dgt=4){
+  data.frame(as.vector(rbind(
+      empty = lessThanCat(E, map, gold, km2, dgt),
+      rural1 = betweenCat(E1, R1, map, gold, km2, dgt),
+      rural2 = betweenCat(R1, R2, map, gold, km2, dgt),
+      periurban = betweenCat(R2, U, map, gold, km2, dgt),
+      urban = greaterThanCat(U, map, gold, km2, dgt)
+      )))
+}
+```
+
+```{r}
+HRSL =  fullCat(0,1,50,250,1000,popk$popfb, popk$pop1k, dgt=3)
+LS = fullCat(0,1,50,250,1000,popk$lspop, popk$pop1k, dgt=3)
+WP = fullCat(0,1,50,250,1000,popk$wppop, popk$pop1k, dgt=3)
+
+
+ppv = cbind(HRSL =  as.vector(HRSL$ppv), LS = as.vector(LS$ppv), WP= as.vector(WP$ppv))
+#npv = cbind(HRSL =  as.vector(HRSL$npv), LS = as.vector(LS$npv), WP= as.vector(WP$npv))
+sens = cbind(HRSL =  as.vector(HRSL$sens), LS = as.vector(LS$sens), WP= as.vector(WP$sens))
+#spec =  cbind(HRSL =  as.vector(HRSL$spec), LS = as.vector(LS$spec), WP= as.vector(WP$spec))
+acc =  cbind(HRSL =  as.vector(HRSL$acc), LS = as.vector(LS$acc), WP= as.vector(WP$acc))
+t(cbind(acc, sens, ppv))
+
+```
+
+We can build an accuracy profile for the maps: 
+```{r}
+getPPV = function(x, map, gold, lower=TRUE){
+  if(x==0 | lower==TRUE){
+    lessThanCat(x,map,gold)$ppv
+  } else { 
+    greaterThanCat(x,map,gold)$ppv
+  }
+}
+
+getPPV = function(x, map, gold){
+  if(x==0){
+    lessThanCat(x,map,gold)$ppv
+  } else { 
+    greaterThanCat(x,map,gold)$ppv
+  }
+}
+
+
+getNPV = function(x, map, gold, lower=TRUE){
+  if(x==0 | lower==TRUE){
+    lessThanCat(x,map,gold)$npv
+  } else { 
+    greaterThanCat(x,map,gold)$npv
+  }
+}
+
+getNPV = function(x, map, gold){
+  if(x==0){
+    lessThanCat(x,map,gold)$npv
+  } else { 
+    greaterThanCat(x,map,gold)$npv
+  }
+}
+
+getSENS = function(x,map,gold, lower=TRUE){
+  if(x==0 | lower==TRUE){
+    lessThanCat(x,map,gold)$sens
+  } else { 
+    greaterThanCat(x,map,gold)$sens
+  }
+}
+
+getSENS = function(x,map,gold){
+  if(x==0){
+    lessThanCat(x,map,gold)$sens
+  } else { 
+    greaterThanCat(x,map,gold)$sens
+  }
+}
+
+getSPEC =  function(x,map,gold, lower=TRUE){
+  if(x==0| lower==TRUE){
+    lessThanCat(x,map,gold)$spec
+  } else { 
+    greaterThanCat(x,map,gold)$spec
+  }
+}
+
+getSPEC =  function(x,map,gold){
+  if(x==0){
+    lessThanCat(x,map,gold)$spec
+  } else { 
+    greaterThanCat(x,map,gold)$spec
+  }
+}
+
+getACC =  function(x,map,gold, lower=TRUE){
+  if(x==0| lower==TRUE){
+    lessThanCat(x,map,gold)$acc
+  } else { 
+    greaterThanCat(x,map,gold)$acc
+  }
+}
+
+getACC =  function(x,map,gold){
+  if(x==0){
+    lessThanCat(x,map,gold)$acc
+  } else { 
+    greaterThanCat(x,map,gold)$acc
+  }
+}
+
+#getPPV(50, popk$lspop, popk$pop1k,lower=TRUE)
+getPPV(50, popk$lspop, popk$pop1k)
+```
+
+```{r}
+mn = 1
+mx = max(popk$pop1k)
+tk = c(0, 1, 50, 250, 1000, 4000, 10000)
+
+urbanXbox = c(1000, 1000, mx, mx, 1000)
+urbanYbox = c(0, 1, 1, 0, 0)
+
+R2Xbox = c(1000, 1000, 250, 250, 1000)
+R2Ybox = c(0, 1, 1, 0, 0)
+
+R1Xbox = c(250, 250, 50, 50, 250)
+R1Ybox = c(0, 1, 1, 0, 0)
+
+R0Xbox = c(1, 1, 50, 50, 1)
+R0Ybox = c(0, 1, 1, 0, 0)
+
+eXbox = c(1, 1, 0, 0, 1)
+eYbox = c(0, 1, 1, 0, 0)
+
+xx = c(0,seq(sqrt(mn), sqrt(mx), length.out=100)^2)
+xxp = sqrt(xx)
+tk0 = sqrt(tk)
+urbanBox = cbind(sqrt(urbanXbox), urbanYbox)
+R2Box = cbind(sqrt(R2Xbox), R2Ybox)
+R1Box = cbind(sqrt(R1Xbox), R1Ybox)
+
+pw=1/3.5
+xx = c(0,seq(mn^pw, mx^pw, length.out=100)^(1/pw))
+xxp = xx^pw 
+tk0 = tk^pw
+urbanBox = cbind(urbanXbox^pw, urbanYbox)
+R2Box = cbind(R2Xbox^pw, R2Ybox)
+R1Box = cbind(R1Xbox^pw, R1Ybox)
+R0Box = cbind(R0Xbox^pw, R0Ybox)
+eBox = cbind(eXbox^pw, eYbox)
+
+
+#xx = c(0,10^seq(log10(mn), log10(mx), length.out=100))
+#xxp = log10(xx)
+#tk0 = log10(tk)
+#urbanBox = cbind(log10(urbanXbox), urbanYbox)
+#R2Box = cbind(log10(R2Xbox), R2Ybox)
+#R1Box = cbind(log10(R1Xbox), R1Ybox)
+
+```
+
+```{r}
+PPVProfile = function(lb=""){ 
+  LSppv = as.vector(unlist(sapply(xx, getPPV, map = popk$lspop, gold =  popk$pop1k)))
+  plot(xxp, LSppv, type = "s", ylim = c(0,1), col = lsclr, xaxt = "n", xlab =  "Population Density", ylab =  "Precision", lwd=2, main = lb)
+  
+  axis(1, tk0, tk)
+  
+  polygon(urbanBox, border = NA, col = "aliceblue")
+  polygon(R2Box, border = NA, col = "cornsilk")
+  polygon(R1Box, border = NA, col = "lavender")
+  polygon(R0Box, border = NA, col = "ivory")
+  polygon(eBox, border = NA, col = grey(0.95))
+  
+  lines(xxp, LSppv, type = "s", col = lsclr, lwd=2)
+  FBppv = as.vector(unlist(sapply(xx, getPPV, map = popk$popfb, gold =  popk$pop1k)))
+  lines(xxp, FBppv, type = "s", col = fbclr, lwd=2)
+  WPppv = as.vector(unlist(sapply(xx, getPPV, map = popk$wppop, gold =  popk$pop1k)))
+  lines(xxp, WPppv, type = "s", col = wpclr, lwd=2)
+}
+PPVProfile() 
+```
+
+```{r}
+NPVProfile = function(lb=""){ 
+  LSnpv = as.vector(unlist(sapply(xx, getNPV, map = popk$lspop, gold =  popk$pop1k)))
+  plot(xxp, LSnpv, type = "s", ylim = c(0,1), col = lsclr, xaxt = "n", xlab =  "Population Density", ylab =  "Negative Predictive Value", lwd=2, main = lb)
+  
+  axis(1, tk0, tk)
+  
+  polygon(urbanBox, border = NA, col = "aliceblue")
+  polygon(R2Box, border = NA, col = "cornsilk")
+  polygon(R1Box, border = NA, col = "lavender")
+  polygon(R0Box, border = NA, col = "ivory")
+  polygon(eBox, border = NA, col = grey(0.95))
+  
+  lines(xxp, LSnpv, type = "s", col = lsclr, lwd=2)
+  FBnpv = as.vector(unlist(sapply(xx, getNPV, map = popk$popfb, gold =  popk$pop1k)))
+  lines(xxp, FBnpv, type = "s", col = fbclr, lwd=2)
+  WPnpv = as.vector(unlist(sapply(xx, getNPV, map = popk$wppop, gold =  popk$pop1k)))
+  lines(xxp, WPnpv, type = "s", col = wpclr, lwd=2)
+}
+NPVProfile() 
+```
+
+```{r}
+SensProfile = function(lb = ""){
+  LSsens = as.vector(unlist(sapply(xx, getSENS, map = popk$lspop, gold =  popk$pop1k)))
+  plot(xxp, LSsens, type = "s", ylim = c(0,1), col = lsclr, xaxt = "n", xlab =  "Population Density", ylab =  "Recall", lwd=2, main = lb)
+  axis(1, tk0, tk)
+
+  polygon(urbanBox, border = NA, col = "aliceblue")
+  polygon(R2Box, border = NA, col = "cornsilk")
+  polygon(R1Box, border = NA, col = "lavender")
+  polygon(R0Box, border = NA, col = "ivory")
+  polygon(eBox, border = NA, col = grey(0.95))
+
+  lines(xxp, LSsens, type = "s", col = lsclr, lwd=2)
+  FBsens = as.vector(unlist(sapply(xx, getSENS, map = popk$popfb, gold =  popk$pop1k)))
+  lines(xxp, FBsens, type = "s", col = fbclr, lwd=2)
+  WPsens = as.vector(unlist(sapply(xx, getSENS, map = popk$wppop, gold =  popk$pop1k)))
+  lines(xxp, WPsens, type = "s", col = wpclr, lwd=2)
+}
+SensProfile() 
+```
+
+```{r}
+SpecProfile = function(lb = ""){
+  LSspec =  as.vector(unlist(sapply(xx, getSPEC, map = popk$lspop, gold =  popk$pop1k)))
+  plot(xxp, LSspec, type = "s", ylim = c(0,1), col = lsclr, xaxt = "n", xlab =  "Population Density", ylab =  "Specificity", lwd=2, main = lb)
+  axis(1, tk0, tk)
+
+  polygon(urbanBox, border = NA, col = "aliceblue")
+  polygon(R2Box, border = NA, col = "cornsilk")
+  polygon(R1Box, border = NA, col = "lavender")
+  polygon(R0Box, border = NA, col = "ivory")
+  polygon(eBox, border = NA, col = grey(0.95))
+
+  lines(xxp, LSspec, type = "s", col = lsclr, lwd=2)
+  FBspec =  as.vector(unlist(sapply(xx, getSPEC, map = popk$popfb, gold =  popk$pop1k)))
+  lines(xxp, FBspec, type = "s", col = fbclr, lwd=2)
+  WPspec =  as.vector(unlist(sapply(xx, getSPEC, map = popk$wppop, gold =  popk$pop1k)))
+  lines(xxp, WPspec, type = "s", col = wpclr, lwd=2)
+}
+SpecProfile() 
+
+```
+
+```{r}
+ACCProfile = function(lb=""){ 
+  LSacc = as.vector(unlist(sapply(xx, getACC, map = popk$lspop, gold =  popk$pop1k)))
+  plot(xxp, LSacc, type = "s", ylim = c(0,1), col = lsclr, xaxt = "n", xlab =  "Population Density", ylab =  "Accuracy", lwd=2, main = lb)
+  
+  axis(1, tk0, tk)
+  
+  polygon(urbanBox, border = NA, col = "aliceblue")
+  polygon(R2Box, border = NA, col = "cornsilk")
+  polygon(R1Box, border = NA, col = "lavender")
+  polygon(R0Box, border = NA, col = "ivory")
+  polygon(eBox, border = NA, col = grey(0.95))
+  
+  lines(xxp, LSacc, type = "s", col = lsclr, lwd=2)
+  FBacc = as.vector(unlist(sapply(xx, getACC, map = popk$popfb, gold =  popk$pop1k)))
+  lines(xxp, FBacc, type = "s", col = fbclr, lwd=2)
+  WPacc = as.vector(unlist(sapply(xx, getACC, map = popk$wppop, gold =  popk$pop1k)))
+  lines(xxp, WPacc, type = "s", col = wpclr, lwd=2)
+}
+ACCProfile()
+```
+
+```{r, echo=FALSE, fig.height=6.5, fig.width=9}
+AreaFigure = function(){
+  par(new, mfrow = c(2,2))
+  pdfAreaFigure(lb = "A")
+  ACCProfile(lb = "B") 
+  SensProfile(lb = "C")
+  PPVProfile(lb = "D") 
+}
+AreaFigure() 
+
+pdf("AccuracyProfile.pdf", height=8, width=9)
+AreaFigure() 
+a=dev.off(dev.cur())
+```
+
+
+```{r}
+AreaFigure1 = function(){
+  par(new, mfrow = c(2,2))
+  #cdfAreaFigure()
+  #pdfAreaFigure()
+  SensProfile()
+  PPVProfile() 
+  SpecProfile()
+  NPVProfile()
+}
+AreaFigure1() 
+
+```
+
+```{r, echo = FALSE}
+pdf("AreaFig1a.pdf", height=7.5, width=4)
+AreaFigure() 
+dev.off(dev.cur())
+```
+
+## SSD Profiles
+
+Population distributions describe how many people live in each place. For the following, let $P_i (x)$ denote the value of the i$^{th}$ distribution map at a point in space $x$ defined over a space, $X$, where $X$ is the area grid or the sectors grid. We consider comparisons of maps over the same grid space $X$. To do so, we based comparisons on two aspects. First, we measured accuracy by land area and by population density. The difference between land area and population density is that the former measures the distribution of population density of the units, while the second measures the same population density weighted by population. In other words, the accuracy of land area summaries of human population distributions look at the distribution of the population density over land (\textit{i.e.} How is the population distributed at a typical point in space?) whereas the accuracy of population density summaries of human population distributions look at the distribution of the properties of the people (\textit{i.e.} How is population distributed for a typical person?). We considered the cumulative distribution function (CDF), $F_i$, where $y$ is sorted for some particular map over the range of all the values in $P_i(x)$ for $x \in X$.
+
+%We compare two distributions using the Cramer-von Mises (CvM) test: 
+%$$\sum_{y}  \left(F_i\left(y\right)-F_j\left(y\right)\right)^2 w(y) dx. $$ 
+%The CvM distribution test is a useful first-order metric for measuring accuracy. In general, we will take $w(y)=1$, but we can also choose $w(y)$ weights to emphasize the accuracy of maps in rural or urban settings. 
+
+Another simple measure of the difference between two maps is %the unweighted CvM, which is the sum of 
+the sum of squared differences of distributions (SSD): 
+$$\sum_{x\in X} \left(P_i \left(x\right)-P_j\left(x\right)\right)^2$$
+One reference point for comparison is against a map that takes the mean value everywhere (i.e. an information-less map, in which each pixel has the same population density, the total population divided by total land area). The overall variance of the population distribution is: 
+$$V = \sum_{x\in X} \left(P_i \left(x\right)-\left<P\right>\right)^2 $$
+By comparison, we can examine the SSD of any map and the gold standard, $P'$: 
+$$D = \sum_{x\in X} \left(P_i \left(x\right)-P'\left(x\right)\right)^2 $$
+Maps that are close to the truth will have a lower SSD. A single number summary is the ratio of the SSD to the total variance, $D/V$. We call $D/V$ the “SSD ratio”, noting it is possible for a map to be so bad that $D/V > 1$. To set some standards for interpreting metrics, we compared the SSD ratio of population maps at 1x1 km resolution to population maps aggregated at 5x5 km, as well as at the community and district levels, and for the whole island. various levels  administrative units. By comparing the SSD by granularity, there is a basis for assessing the accuracy of maps developed using different methodologies. We can use the deviance test for a set of nested population surfaces to compare how well some particular high resolution map compares to a coarser version of the map. For example, how much more accurate is a 1x1 km map than a map of population by administrative unit?  For any set of nested maps, we can compare the accuracy gain by granularity by looking at the deviance ratio for successively mapped populations.
+
+
+With a gold standard, the weighted SSD can be used to develop a tailored measure of accuracy: 
+$$D_w = \sum_{x\in X} \left(P_i \left(x\right)-P'\left(x\right)\right)^2 w(P'(x)) $$
+These two different metrics can be used diagnostically: when an accurate map is misaligned, it will have the proper CDF, but it could appear to be highly inaccurate by the SSD ratio test. 
+
+```{r}
+
+##### GET RELATIVE POPULATION FIGURES
+mcpoptot=sum(popk$pop1k)
+wppoptot=sum(popk$wppop)
+lspoptot=sum(popk$lspop)
+fbpoptot=sum(popk$popfb)
+popk$pop1kp<-popk$pop1k/mcpoptot
+popk$wppopp<-popk$wppop/wppoptot
+popk$lspopp<-popk$lspop/lspoptot
+popk$fbpopp<-popk$popfb/fbpoptot
+
+##### BUILD THE 5KM GRID
+
+km5<-read.csv('5x5grid.csv', sep=",")
+x<-c("areaId", "fiveId")
+names(km5)<-x
+
+popk<-merge(popk, km5, by="areaId", all.x=T)
+
+pop5k<-aggregate(list(mcpop=popk$pop1kp, wppop=popk$wppopp, lspop=popk$lspopp, popfb=popk$fbpopp), by=list(fiveId=popk$fiveId),
+                 FUN=mean)
+
+popk<-merge(popk, list(fiveId=pop5k$fiveId, mcpop5=pop5k$mcpop, wppop5=pop5k$wppop, lspop5=pop5k$lspop,
+                       fbpop5=pop5k$popfb), by="fiveId", all.x=T)
+
+##### BUILD THE ADMIN4 LAYER
+
+ad4<-read.csv('AreaByComm.csv', sep=',')
+x<-c("areaId", "admin4", 'admin4Id')
+names(ad4)<-x
+ad4_2<-read.csv('AreaByNPad4.csv', sep=',') ### missed points due to National Parks, except for 3 (areaId 94, 1025 and 2136)
+x<-c("areaId", "admin4Id")
+names(ad4_2)<-x
+ad4_2$admin4="NP-corrected"
+ad4_2$admin4Id<-ifelse(ad4_2$admin4Id=="", "NN", as.character(ad4_2$admin4Id))
+
+ad4_3<-rbind(ad4, ad4_2)
+ad4_3$dup<-duplicated(ad4_3$areaId)
+ad4_3<-ad4_3[-which(ad4_3$dup==T),]
+
+popk<-merge(popk, ad4_3[,1:3], by="areaId", all.x=T)
+
+popad4<-aggregate(list(mcpop=popk$pop1kp, wppop=popk$wppopp, lspop=popk$lspopp, popfb=popk$fbpopp), by=list(admin4Id=popk$admin4Id),
+                  FUN=mean)
+
+popk<-merge(popk, list(admin4Id=popad4$admin4Id, mcpopad4=popad4$mcpop, wppopad4=popad4$wppop, lspopad4=popad4$lspop,
+                       fbpopad4=popad4$popfb), by="admin4Id", all.x=T)
+
+##### BUILD THE ADMIN2 LAYER
+
+ad2<-read.csv('AreaByDistrict.csv', sep=',')
+x<-c("areaId", "admin2", 'admin2Id', 'admin2type')
+names(ad2)<-x
+
+popk<-merge(popk, ad2, by="areaId", all.x=T)
+
+popad2<-aggregate(list(mcpop=popk$pop1kp, wppop=popk$wppopp, lspop=popk$lspopp, popfb=popk$fbpopp), by=list(admin2=popk$admin2),
+                  FUN=mean)
+
+popk<-merge(popk, list(admin2=popad2$admin2, mcpopad2=popad2$mcpop, wppopad2=popad2$wppop, lspopad2=popad2$lspop,
+                       fbpopad2=popad2$popfb), by="admin2", all.x=T)
+```
+
+
+```{r}
+ssdRatioF = function(map, gold, norm=TRUE){
+  # 0 is perfect
+  # <1 implies the map is an improvement
+  # >1 is awful 
+  # Inf assigns values to empty places
+  # -1 
+  if(sum(gold)>0){
+    if(norm==TRUE){
+      gold = gold/sum(gold)
+      map = map/sum(map)
+    } 
+    R = sum((map-gold)^2)/sum((gold-mean(gold))^2)
+  } else {
+    if(sum(map)==0){
+      R=0
+    } else { 
+      R = -log10(sum(map)) #Inf
+    }
+  }
+  return(R)
+}
+
+ssdRatio = function(map, gold, P=NULL, norm=TRUE){
+  if(is.null(P)){
+    RR = ssdRatioF(map,gold,norm)
+  }else{
+    ids = unique(P)
+    L = length(ids)
+    RR = rep(-1,L)
+    for(i in 1:L){
+      ix = which(ids[i] == P)
+      if(length(ix)>0) RR[i] = ssdRatioF(map[ix], gold[ix], norm)
+    }
+    RR = data.frame(RR, names = ids)
+  }
+  return(RR)
+}
+
+ssdRatioT = function(map, gold, P=NULL){
+ gold = gold/sum(gold)
+ map = map/sum(map)
+ if(is.null(P)){
+     goldMeans = mean(gold)
+  }else{
+    goldMeans = 0*gold
+    ids = unique(P)
+    L = length(ids)
+    for(i in 1:L){
+      ix = which(ids[i] == P)
+      if(length(ix)>0){ 
+        goldMeans[ix] = mean(gold[ix])
+      }
+    }
+  }
+ sum((map-gold)^2)/sum((gold-goldMeans)^2)
+}
+```
+
+```{r}
+normed = c(fb=ssdRatio(popk$popfb, popk$pop1k), wp=ssdRatio(popk$wppop, popk$pop1k), ls=ssdRatio(popk$lspop, popk$pop1k), bimep=ssdRatio(popk$pop1k, popk$pop1k), std = ssdRatio(mean(popk$pop1k) + 0*popk$pop1k, popk$pop1k))
+
+asis = c(fb=ssdRatio(popk$popfb, popk$pop1k, norm=FALSE), wp=ssdRatio(popk$wppop, popk$pop1k, norm=FALSE), ls=ssdRatio(popk$lspop, popk$pop1k, norm=FALSE), bimep=ssdRatio(popk$pop1k, popk$pop1k, norm=FALSE), std = ssdRatio(mean(popk$pop1k) + 0*popk$pop1k, popk$pop1k, norm=FALSE))
+cbind(normed, asis)
+```
+
+```{r}
+ix = which(popk$lspop>20000)
+c(ssdRatio(popk$lspop[-ix], popk$pop1k[-ix]),
+ssdRatio(popk$lspop[-ix], popk$pop1k[-ix], popk$admin2))
+length(ix)
+c(ssdRatio(popk$lspop[-ix], popk$pop1k[-ix], norm=FALSE),
+ssdRatio(popk$lspop[-ix], popk$pop1k[-ix], popk$admin2,norm=FALSE))
+length(ix)
+
+```
+
+
+```{r}
+A = data.frame(cbind("HRSL"=c(ssdRatio(popk$popfb, popk$pop1k),ssdRatio(popk$popfb, popk$pop1k, popk$admin2)[1:5,1]),
+         "Landscan"=c(ssdRatio(popk$lspop, popk$pop1k),ssdRatio(popk$lspop, popk$pop1k, popk$admin2)[1:5,1]), 
+        "WorldPOP"=c(ssdRatio(popk$wppop, popk$pop1k),ssdRatio(popk$wppop, popk$pop1k, popk$admin2)[1:5,1])),
+        row.names = paste(c("Bioko Island", paste(ssdRatio(popk$wppop, popk$pop1k, popk$admin2)[1:5,2]))))
+A[6,] = -A[6,]
+A
+```
+
+```{r}
+B = data.frame(cbind("HRSL"=c(ssdRatio(popk$popfb, popk$pop1k, norm=FALSE),ssdRatio(popk$popfb, popk$pop1k, popk$admin2, norm=FALSE)[1:5,1]),
+         "Landscan"=c(ssdRatio(popk$lspop, popk$pop1k, norm=FALSE),ssdRatio(popk$lspop, popk$pop1k, popk$admin2, norm=FALSE)[1:5,1]), 
+        "WorldPOP"=c(ssdRatio(popk$wppop, popk$pop1k, norm=FALSE),ssdRatio(popk$wppop, popk$pop1k, popk$admin2, norm=FALSE)[1:5,1])),
+        row.names = paste(c("Bioko Island", paste(ssdRatio(popk$wppop, popk$pop1k, popk$admin2)[1:5,2]))))
+B[6,] = -B[6,]
+B
+```
+```{r}
+signif(cbind(B,A),3)
+```
+
+
+
+```{r}
+Bioko = c(ssdRatioT(popk$popfb, popk$pop1k),
+          ssdRatioT(popk$lspop, popk$pop1k),
+          ssdRatioF(popk$wppop, popk$pop1k)) 
+
+Admin2 = c(ssdRatioT(popk$popfb, popk$pop1k, popk$admin2),
+           ssdRatioT(popk$lspop, popk$pop1k, popk$admin2),
+           ssdRatioT(popk$wppop, popk$pop1k, popk$admin2))
+
+
+
+fiveID = c(ssdRatioT(popk$popfb, popk$pop1k, popk$fiveId),
+           ssdRatioT(popk$lspop, popk$pop1k, popk$fiveId),
+            ssdRatioT(popk$wppop, popk$pop1k, popk$fiveId))
+
+
+Admin4 = c(ssdRatioT(popk$popfb, popk$pop1k, popk$admin4),
+           ssdRatioT(popk$lspop, popk$pop1k, popk$admin4),
+           ssdRatioT(popk$wppop, popk$pop1k, popk$admin4))
+
+
+data.frame(cbind(Admin4,fiveID, Admin2, Bioko), row.names = c("Facebook", "Landscan", "WorldPOP"))
+#data.frame(cbind(fiveID, Admin2, Bioko), row.names = c("Facebook", "Landscan", "WorldPOP"))
+
+```
+
+
+## PfPR Maps
+
+```{r}
+######### FOR PFPR FIGURES VS FRACTION OF POPULATION (CURRENTLY, FIGURE 8) ####
+popk2=distinct(popk, popk$areaId, .keep_all = T)
+poppr<-merge(mcprk, popk2, by='areaId', all.x=T)
+poppr<-poppr[!is.na(poppr$pop1k),]
+
+PfPR = poppr$pfpr
+
+H0 = poppr$pop1k/sum(poppr$pop1k, na.rm=T)
+H1 = poppr$wppop/sum(poppr$wppop, na.rm = T)
+H2 = poppr$lspop/sum(poppr$lspop, na.rm = T)
+H3 = poppr$popfb/sum(poppr$popfb, na.rm = T)
+
+
+prBYh_cdf = function(Pf, H, B=100){
+  xx = seq(0, 1, length.out = B+1)
+  cdf = 0*xx
+  for(i in 0:B){
+    ix = which(Pf <= xx[i+1])
+    cdf[i+1] = ifelse(length(ix)==0, 0, sum(H[ix])) 
+  }
+  cbind(xx, cdf)
+}
+
+prBYh_pdf = function(Pf, H, B=100){
+  xx = prBYh_cdf(Pf,H,B)
+  xmid = (xx[-1,1] + xx[-B-1,1])/2
+  pdf = diff(xx[,2])
+  cbind(xmid, pdf)
+}
+
+cdfPfPlot = function(Pf, H, B=100, clr ="black", llwd=2){
+  xx = prBYh_cdf(Pf,H,B)
+  plot(xx[,1], xx[,2], type = "l", xlab = "PfPR", ylab = "Population fraction", 
+       main = "A", lwd=llwd, col = clr, xlim = c(0,.45))
+}
+
+cdfPfLines = function(Pf, H, B=100, clr ="red", llwd=2){
+  xx = prBYh_cdf(Pf,H,B)
+  lines(xx[,1], xx[,2], lwd=llwd, col = clr)
+}
+
+pdfPfPlot = function(Pf, H, B=100, llwd=2, clr = "black"){
+  xx = prBYh_pdf(Pf, H, B)
+  plot(xx[,1], xx[,2], col = clr, type = "l", lwd=llwd, xlim = c(0,.45), ylim=c(0,0.30),xlab="PfPR", ylab="Population fraction", main="B")
+}
+
+pdfPfLines = function(Pf, H, B=100, clr = "red", llwd=2){
+  xx = prBYh_pdf(Pf, H, B)
+  lines(xx[,1], xx[,2], col = clr, lwd=llwd)
+}
+
+#col<-c("darkorchid3","darkolivegreen3","goldenrod2","cornflowerblue")
+
+BB=80
+pfprFigure = function(){
+par(mfrow = c(1,2))
+
+cdfPfPlot(PfPR, H0, BB, clr = col[1])
+cdfPfLines(PfPR, H1, BB, clr = col[3])
+cdfPfLines(PfPR, H2, BB, clr = col[5])
+cdfPfLines(PfPR, H3, BB, clr = col[7])
+
+
+pdfPfPlot(PfPR,H0, BB, clr = col[1])
+pdfPfLines(PfPR, H1, BB, clr = col[3]) 
+pdfPfLines(PfPR, H2, BB, clr = col[5]) 
+pdfPfLines(PfPR, H3, BB, clr = col[7]) 
+legend('topright', legend = c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
+       lty=1, lwd=2, cex=1)
+}
+
+pfprFigure()
+pdf('PRbypop_.pdf', width = 10, height = 5)
+pfprFigure()
+a=dev.off()
+```
+
+
+

@@ -18,7 +18,28 @@ knitr::opts_chunk$set(
 library(popbioko)
 ```
 
-```{bash}
-cd data
-scp transfer.ihme.uw.edu:/ihme/malaria_modeling/equatorial_guinea/* .
+This shows how to get the incoming data and takes a look at it.
+
+If you have an account at IHME, the following will copy files to
+your local drive, under the data directory:
+```{r}
+download_worldpop()
+download_bioko_grids()
+download_hrsl_points()
+```
+
+The Bioko grids define cells where BIMEP assigns residents of
+the island. One is a 1 km grid, the other a 100 m grid.
+If we read those grids, we can see that the input files
+are projected into UTM 32N, which makes all distances in meters.
+That's very convenient, but the original grids were defined as
+a regular grid in latitude and longitude.
+```{r}
+grids <- read_bioko_grids()
+grid_info <- parameters_of_km_grid(grids$coarse, unproject = TRUE)
+```
+If we want to make such a grid, we could use
+```{r}
+dimensions <- c(grid_info$x_count, grid_info$y_count)
+coarse_grid_copy <- make_fresh_grid(grid_info$bbox, dimensions)
 ```

@@ -1,0 +1,36 @@
+Driver: GTiff/GeoTIFF
+Files: population_gnq_2018-10-01.tif
+       population_gnq_2018-10-01.tif.aux.xml
+Size is 20565, 18901
+Coordinate System is:
+GEOGCS["WGS 84",
+    DATUM["WGS_1984",
+        SPHEROID["WGS 84",6378137,298.257223563,
+            AUTHORITY["EPSG","7030"]],
+        AUTHORITY["EPSG","6326"]],
+    PRIMEM["Greenwich",0],
+    UNIT["degree",0.0174532925199433],
+    AUTHORITY["EPSG","4326"]]
+Origin = (5.620972222222223,3.787916666666667)
+Pixel Size = (0.000277777777778,-0.000277777777778)
+Metadata:
+  AREA_OR_POINT=Area
+Image Structure Metadata:
+  COMPRESSION=DEFLATE
+  INTERLEAVE=BAND
+Corner Coordinates:
+Upper Left  (   5.6209722,   3.7879167) (  5d37'15.50"E,  3d47'16.50"N)
+Lower Left  (   5.6209722,  -1.4623611) (  5d37'15.50"E,  1d27'44.50"S)
+Upper Right (  11.3334722,   3.7879167) ( 11d20' 0.50"E,  3d47'16.50"N)
+Lower Right (  11.3334722,  -1.4623611) ( 11d20' 0.50"E,  1d27'44.50"S)
+Center      (   8.4772222,   1.1627778) (  8d28'38.00"E,  1d 9'46.00"N)
+Band 1 Block=256x256 Type=Float64, ColorInterp=Gray
+  Min=5.451 Max=43.057 
+  Minimum=5.451, Maximum=43.057, Mean=7.792, StdDev=2.484
+  NoData Value=nan
+  Overviews: 643x591
+  Metadata:
+    STATISTICS_MAXIMUM=43.057392495002
+    STATISTICS_MEAN=7.7922340314324
+    STATISTICS_MINIMUM=5.45113019632
+    STATISTICS_STDDEV=2.4836405502531
