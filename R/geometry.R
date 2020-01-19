@@ -56,4 +56,25 @@ register_bimep_population <- function(grid_100m) {
   projected_cell_center <- lapply(1:nrow(pops), function(idx) {sf::st_point(c(pops[idx, "xcoord"], pops[idx, "ycoord"]))})
   features <- sf::st_sf(st_as_sfc(projected_cell_center), crs = "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84")
   features_latlong <- sf::st_transform(features, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+  features_latlong
+}
+
+
+#' Given an HRSL raster, convert it into points in space.
+hrsl_points <- function(hrsl_raster) {
+  # Make 3 columns, (x, y, population)
+  hrsl_xym <- raster::rasterToPoints(hrsl)
+  # Make Points with one feature, the population.
+  hrsl_sf <- sf::st_as_sf(x = data.frame(hrsl_xym), coords = 1:2)
+  sf::st_crs(hrsl_sf) <- sp::CRS("+init=epsg:4326")
+  hrsl_sf
+}
+
+
+#' Given spatial points of population, assign them to shapes.
+assign_to_grid <- function(grid, points) {
+  sf::st_transform(grid, sp::st_crs(points))
+  # This will have NA where there are no points
+  points_on_grid <- aggregate(points, grid, sum)
+
 }

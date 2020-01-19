@@ -80,3 +80,8 @@ download_hrsl_points <- function(local_directory = "data") {
   }
   unzip(local_path, exdir = local_directory)
 }
+
+
+read_hrsl <- function(local_directory = "data") {
+  raster::raster(fs::path(local_directory, "population_gnq_2018-10-01.tif"))
+}

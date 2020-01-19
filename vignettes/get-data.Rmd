@@ -43,3 +43,13 @@ If we want to make such a grid, we could use
 dimensions <- c(grid_info$x_count, grid_info$y_count)
 coarse_grid_copy <- make_fresh_grid(grid_info$bbox, dimensions)
 ```
+
+```{r}
+library(tmap)
+hrsl_raster <- read_hrsl()
+hrsl_points_sf <- hrsl_points(hrsl_raster)
+hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
+grids$coarse["hrsl"] <- hrsl_points_sf[[1]]
+tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) + tm_polygons("hrsl", title = "HRSL", palette = "Greens", style = "log10") + tm_layout(legend.title.size = 1, legend.text.size = 1)
+```
+
