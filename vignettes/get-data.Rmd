@@ -16,6 +16,9 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(popbioko)
+library(sp)
+library(sf)
+library(GISTools)
 ```
 
 This shows how to get the incoming data and takes a look at it.
@@ -43,6 +46,13 @@ If we want to make such a grid, we could use
 dimensions <- c(grid_info$x_count, grid_info$y_count)
 coarse_grid_copy <- make_fresh_grid(grid_info$bbox, dimensions)
 ```
+We can show the original and copy in unprojected space.
+```{r}
+grid_1km <- sf::st_transform(grids$coarse, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+tm_shape(coarse_grid_copy) + tm_polygons(alpha = 0.1, border.col = "red") + tm_shape(grid_1km) + tm_polygons(alpha = 0.0, border.col = "blue")
+```
+
+
 
 ```{r}
 library(tmap)

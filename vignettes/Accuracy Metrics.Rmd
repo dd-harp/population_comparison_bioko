@@ -55,7 +55,7 @@ str10 = c("1", "10", "100", "1,000", expression(10^4),
 
 ## Population Density
 
-The population density per $km^2$ must be computed for the 100 meter maps. Every pixel has a positive population density, so we create objects to hold the mapped population densities.  
+The population density per $\mbox{km}^2$ must be computed for the 100 meter maps. Every pixel has a positive population density, so we create objects to hold the mapped population densities.  
 ```{r}
 ###### COMPUTE THE POPULATION DENSITY
 sectors = data.frame(read.csv2("popm.csv", header=T, sep = ",", as.is=TRUE)) 
