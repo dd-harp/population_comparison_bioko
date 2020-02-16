@@ -5,6 +5,8 @@ date: "9/18/2019"
 output:
   pdf_document: default
   html_document: default
+params:
+  source_data: /home/adolgert/dev/popbioko/inst/extdata/source
 ---
 
 ## How Accurate is a Map? 
@@ -12,61 +14,79 @@ output:
 If someone handed you a map, 
 
 ## Setup
-
-```{r, echo=FALSE}
-##### LOAD THE DATA IMAGE
+Load the data image.
+```{r load_data, echo=FALSE}
 require(plotrix)
 require(dplyr)
-rm(list = ls())
-load('popData_image.RData')
-load('pfpr_pops.RData')
-popk$pop1k<-ifelse(is.na(popk$pop1k),0,popk$pop1k)
-popm$pop100<-ifelse(is.na(popm$pop100),0,popm$pop100)
+rm(list = ls()[ls() != "params"])
+# Loads fbpopk, fbpopm, popk, popm, wp15, wp15m
+load(fs::path(params$source_data, "popData_image.RData"))
+# Loads conf, data, data2, fbprk, lsprk, mcprk
+# mis04...ms18, ras, ras2
+load(fs::path(params$source_data, "pfpr_pops.RData"))
+popk$pop1k <- ifelse(is.na(popk$pop1k),0,popk$pop1k)
+popm$pop100 <- ifelse(is.na(popm$pop100),0,popm$pop100)
 
-maps1k = list("BIMEP" = popk$pop1k, "HRSL" = popk$popfb,  "Landscan" = popk$lspop, "WorldPOP"=popk$wppop)
-maps100m = list("BIMEP" = popm$pop100, "HRSL" = popm$popfb, "WorldPOP"=popm$wppop)
-
+maps1k <- list(
+  "BIMEP" = popk$pop1k, "HRSL" = popk$popfb,
+  "Landscan" = popk$lspop, "WorldPOP" = popk$wppop)
+maps100m <- list(
+  "BIMEP" = popm$pop100, "HRSL" = popm$popfb,
+  "WorldPOP" = popm$wppop)
 ```
 
-```{r, echo=FALSE}
-##### SET GENERAL COLOR SCHEME
+Set color scheme so that each data set has a consistent
+color through the computation.
+```{r set_colors, echo=FALSE}
 require(viridis)
-col<-plasma(8,alpha=1, begin=0, end=1)
+col <- plasma(8, alpha = 1, begin = 0, end = 1)
 # BIMEP    = col[1]
-gsclr = col[1]
+gsclr <- col[1]
 # WorldPOP = col[3]
-wpclr = col[3]
+wpclr <- col[3]
 # Landscan = col[5]
-lsclr = col[5]
+lsclr <- col[5]
 # HRSL     = col[7]
-fbclr = col[7]
-gry = grey(0.7)
+fbclr <- col[7]
+gry <- grey(0.7)
 
-str2 = c("1", "2", "4", "8", expression(2^4),
-         expression(2^5),expression(2^6),expression(2^7),
-         expression(2^8),expression(2^9),expression(2^10),
-         expression(2^11),expression(2^12),expression(2^13),
-         expression(2^14),expression(2^15),expression(2^16),
-         expression(2^17),expression(2^18),expression(2^19))
+str2 <- c(
+  "1", "2", "4", "8", expression(2 ^ 4),
+  expression(2 ^ 5), expression(2 ^ 6), expression(2 ^ 7),
+  expression(2 ^ 8), expression(2 ^ 9), expression(2 ^ 10),
+  expression(2 ^ 11), expression(2 ^ 12), expression(2 ^ 13),
+  expression(2 ^ 14), expression(2 ^ 15), expression(2 ^ 16),
+  expression(2 ^ 17), expression(2 ^ 18), expression(2 ^ 19))
 
-str10 = c("1", "10", "100", "1,000", expression(10^4),
-          expression(10^5),expression(10^6))
+str10 <- c(
+  "1", "10", "100", "1,000", expression(10^4),
+  expression(10^5), expression(10^6))
 ```
 
 ## Population Density
 
 The population density per $\mbox{km}^2$ must be computed for the 100 meter maps. Every pixel has a positive population density, so we create objects to hold the mapped population densities.  
-```{r}
-###### COMPUTE THE POPULATION DENSITY
-sectors = data.frame(read.csv2("popm.csv", header=T, sep = ",", as.is=TRUE)) 
-sectors$xcoord = as.numeric(sectors$xcoord)
-sectors$ycoord = as.numeric(sectors$ycoord)
-sectors$pd1km = sectors$xcoord*0
+```{r popm, dependson = "load_data"}
+sectors <- data.frame(read.csv2(
+  fs::path(params$source_data, "popm.csv"),
+  header = T, sep = ",", as.is = TRUE)) 
+sectors$xcoord <- as.numeric(sectors$xcoord)
+sectors$ycoord <- as.numeric(sectors$ycoord)
+# Create pixel density for 1km grid.
+sectors$pd1km <- sectors$xcoord * 0
+```
 
+The density calculation uses distance, $r = \sqrt{(x-x_0)^2 + (y-y_0)^2}$
+in the current coordinate system of popm.csv. This csv is in a UTM projection,
+so it's in meters.
+It looks for pixels
+within $r = 1000/\sqrt{\pi}$ so $\pi r^2 < 1000^2$. That's the count
+within a $1\:\mbox{km}^2$ disc.
+```{r calculate_density, dependson = "popm"}
 getPD = function(i, D=1000/sqrt(pi)){
-  with(as.list(sectors),{
-    dst = sqrt((xcoord[i]-xcoord)^2 + (ycoord[i]-ycoord)^2)
-    ix = which(dst<=D)
+  with(as.list(sectors), {
+    dst = sqrt((xcoord[i] - xcoord)^2 + (ycoord[i] - ycoord)^2)
+    ix = which(dst <= D)
     aa = sum(pop100[ix])
     bb = sum(as.double(wppop[ix]))
     cc = sum(as.double(popfb[ix]))
@@ -74,17 +94,19 @@ getPD = function(i, D=1000/sqrt(pi)){
   })}
 
 #This is a time consuming computation, so we don't want to redo it. 
-if(!exists("popd")) popd = sapply(1:194090, getPD)
+if (!exists("popd")) {
+  popd <- sapply(1:194090, getPD)
+}
 
-dpop100 = ddpop100 = popd[1,]
-ix = which(sectors$pop100==0)
-ddpop100[ix] = 0 
-dwppop = ddwppop= popd[2,]
-ix = which(as.double(sectors$wppop)==0)
-ddwppop[ix] = 0 
-dpopfb = ddpopfb = popd[3,]
-ix = which(as.double(sectors$popfb)==0)
-ddpopfb[ix] = 0 
+dpop100 <- ddpop100 = popd[1,]
+ix <- which(sectors$pop100 == 0)
+ddpop100[ix] <- 0 
+dwppop = ddwppop <- popd[2,]
+ix <- which(as.double(sectors$wppop) == 0)
+ddwppop[ix] <- 0 
+dpopfb <- ddpopfb <- popd[3,]
+ix <- which(as.double(sectors$popfb) == 0)
+ddpopfb[ix] <- 0 
 ```
 
 
@@ -92,88 +114,95 @@ ddpopfb[ix] = 0
 
 ## Basic Stats
 
-```{r}
-MaxPopDens = round(
-c(max(maps1k[[1]]), 
-max(maps1k[[2]]), 
-max(maps1k[[3]]),
-max(maps1k[[4]]),
-max(ddpop100), 
-max(ddpopfb),
-max(ddwppop)))
+```{r maximum_density, dependson = c("calculate_density", "load_data")}
+MaxPopDens <- round(
+  c(max(maps1k[[1]]), 
+  max(maps1k[[2]]), 
+  max(maps1k[[3]]),
+  max(maps1k[[4]]),
+  max(ddpop100), 
+  max(ddpopfb),
+  max(ddwppop)))
 ```
 
-```{r}
-Tot = round(c(sum(maps1k[[1]]), 
-sum(maps1k[[2]]), 
-sum(maps1k[[3]]),
-sum(maps1k[[4]]),
-sum(maps100m[[1]]),
-sum(maps100m[[2]]),
-sum(maps100m[[3]])))
+```{r total_density, dependson = c("calculate_density", "load_data")}
+Tot <- round(c(sum(maps1k[[1]]), 
+  sum(maps1k[[2]]), 
+  sum(maps1k[[3]]),
+  sum(maps1k[[4]]),
+  sum(maps100m[[1]]),
+  sum(maps100m[[2]]),
+  sum(maps100m[[3]])))
 ```
 
 
 ```{r}
-emptyFrac = function(H){
-  ix = which(H==0)
-  P = length(ix)/length(H)
-  round(1000*P)/10
+emptyFrac <- function(H) {
+  ix <- which(H == 0)
+  P <- length(ix) / length(H)
+  round(1000 * P) / 10
 }
 
-Emp = c(emptyFrac(maps1k[[1]]), 
-emptyFrac(maps1k[[2]]), 
-emptyFrac(maps1k[[3]]),
-emptyFrac(maps1k[[4]]),
-emptyFrac(maps100m[[1]]),
-emptyFrac(maps100m[[2]]),
-emptyFrac(maps100m[[3]])) 
+Emp <- c(emptyFrac(maps1k[[1]]), 
+  emptyFrac(maps1k[[2]]), 
+  emptyFrac(maps1k[[3]]),
+  emptyFrac(maps1k[[4]]),
+  emptyFrac(maps100m[[1]]),
+  emptyFrac(maps100m[[2]]),
+  emptyFrac(maps100m[[3]])) 
 ```
 
 ```{r}
-ParetoFraction = function(H){
- H = sort(H)
- HH = cumsum(H)/sum(H)
- L = length(H)
- X = c(L:1)/L
- P=X[min(which(X<HH))]
- Q = round(100*P)
- ans = paste(100-Q,":",Q, sep="")
+ParetoFraction <- function(H) {
+ H <- sort(H)
+ HH <- cumsum(H)/sum(H)
+ L <- length(H)
+ X <- c(L:1)/L
+ P <- X[min(which(X<HH))]
+ Q <- round(100*P)
+ ans <- paste(100-Q,":",Q, sep="")
  return(ans)
 }
 
-for(i in 1:length(maps1k))
+for (i in 1:length(maps1k)) {
   ParetoFraction(maps1k[[i]])
+}
 
-PF = c(ParetoFraction(maps1k[[1]]), 
-ParetoFraction(maps1k[[2]]), 
-ParetoFraction(maps1k[[3]]),
-ParetoFraction(maps1k[[4]]),
-ParetoFraction(maps100m[[1]]),
-ParetoFraction(maps100m[[2]]),
-ParetoFraction(maps100m[[3]]))
+PF <- c(
+  ParetoFraction(maps1k[[1]]), 
+  ParetoFraction(maps1k[[2]]), 
+  ParetoFraction(maps1k[[3]]),
+  ParetoFraction(maps1k[[4]]),
+  ParetoFraction(maps100m[[1]]),
+  ParetoFraction(maps100m[[2]]),
+  ParetoFraction(maps100m[[3]]))
 PF
 ```
 
 ```{r}
-urbanFrac = function(H){
-  ix = which(H>=1000)
-  P = length(ix)/length(H)
-  round(1000*P)/10
+urbanFrac <- function(H){
+  ix <- which(H >= 1000)
+  P <- length(ix) / length(H)
+  round(1000 * P) / 10
 }
 
-Urb = c(urbanFrac(maps1k[[1]]), 
-urbanFrac(maps1k[[2]]), 
-urbanFrac(maps1k[[3]]),
-urbanFrac(maps1k[[4]]),
-urbanFrac(ddpop100),
-urbanFrac(ddpopfb),
-urbanFrac(ddwppop))
+Urb <- c(
+  urbanFrac(maps1k[[1]]), 
+  urbanFrac(maps1k[[2]]), 
+  urbanFrac(maps1k[[3]]),
+  urbanFrac(maps1k[[4]]),
+  urbanFrac(ddpop100),
+  urbanFrac(ddpopfb),
+  urbanFrac(ddwppop))
 ```
 
 ```{r}
-mapNames = c("BIMEP 1k", "HRSL 1k", "Landscan 1k", "WorldPop 1k", "BIMEP 100m", "HRSL 100m", "WorldPop 100m")
-BasicStats = data.frame(Total=Tot, MaxPopDens=MaxPopDens,  Empty=Emp, Urban=Urb, ParetoFraction=PF, row.names = mapNames)
+mapNames <- c(
+  "BIMEP 1k", "HRSL 1k", "Landscan 1k", "WorldPop 1k",
+  "BIMEP 100m", "HRSL 100m", "WorldPop 100m")
+BasicStats <- data.frame(
+  Total = Tot, MaxPopDens = MaxPopDens,  Empty = Emp,
+  Urban = Urb, ParetoFraction = PF, row.names = mapNames)
 BasicStats
 ```
 
@@ -182,15 +211,17 @@ t(BasicStats)
 ```
 
 ```{r}
-vv = popm$popfb[152]
-A = round(popm$popfb/vv)
-sort(unique(round(popm$popfb/vv)))
+vv <- popm$popfb[152]
+A <- round(popm$popfb / vv)
+sort(unique(round(popm$popfb / vv)))
 ```
+
 ```{r}
-B = vv*A-popm$popfb
-ix = which(B>0)
+B <- vv * A - popm$popfb
+ix <- which(B > 0)
 unique(popm$popfb[ix])
 ```
+
 ```{r}
 9.796294*3*c(1:5)
 ```
@@ -202,29 +233,41 @@ unique(popm$wppop)
 
 ## Scatter Plots
 ```{r}
-ff1 = function(x,offset=0){log(1+x+offset)}
+ff1 <- function(x,offset=0){log(1+x+offset)}
 
-scatter1k.add = function(yy, cid=5, ff=ff1, offset = 0, cx =.7){
-  points(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch =19, cex=cx) 
+scatter1k.add <- function(yy, cid = 5, ff = ff1, offset = 0, cx = .7){
+  points(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19, cex = cx) 
 }
 
-scatter1k = function(yy, cid=5, ff=ff1, offset=0,cx=.7, lgn = FALSE, tl="", xlb = "BIMEP Population Density"){
-  mx = max(popk$lspop)*1.01
-  plot(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19, xlim = ff(c(0,mx)), ylim = ff(c(0,mx)), xaxt = "n", yaxt="n", xlab = xlb, ylab = "Mapped Population Density", cex=cx, main = tl)
+scatter1k <- function(
+  yy, cid = 5, ff = ff1, offset = 0, cx = .7,
+  lgn = FALSE, tl = "", xlb = "BIMEP Population Density"
+  )
+  {
+  mx <- max(popk$lspop) * 1.01
+  plot(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19,
+       xlim = ff(c(0,mx)), ylim = ff(c(0,mx)), xaxt = "n", yaxt = "n",
+       xlab = xlb, ylab = "Mapped Population Density", cex = cx, main = tl)
   axis(1, ff(10^c(0:5)), 10^c(0:5))
   axis(2, ff(10^c(0:5)), 10^c(0:5))
   segments(ff(0), ff(0), ff(10^5), ff(10^5))
   segments(ff(1), ff(1), ff(1), ff(10^5), col = grey(0.7))
   segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
   scatter1k.add(yy,cid,ff,offset,cx)
-  if(lgn==TRUE)
-  legend('topleft', legend =  c('HRSL', 'Landscan', 'WorldPop'), col=col[c(7,5,3)],
-         lty=1, lwd=2, cex=1, bg = "white", bty = "n")
+  if (lgn) {
+    legend('topleft', legend =  c('HRSL', 'Landscan', 'WorldPop'), col=col[c(7,5,3)],
+           lty=1, lwd=2, cex=1, bg = "white", bty = "n")
+  }
 }
 
-scatter100m = function(yy, gold=ddpop100, clr = gry, ff=ff1, offset=0,cx=.7, lgn = FALSE, tl="", xlb = "BIMEP Population Density", ylb = "Population Density"){
-  mx = max(gold)*1.01
-  plot(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, xlim = ff(c(0,mx)), ylim = ff(c(0,mx)), xaxt = "n", yaxt="n", xlab = xlb, ylab = ylb, cex=cx, main = tl)
+scatter100m <- function(
+  yy, gold = ddpop100, clr = gry, ff = ff1, offset = 0, cx = .7,
+  lgn = FALSE, tl = "", xlb = "BIMEP Population Density", ylb = "Population Density"
+  )
+  {
+  mx <- max(gold)*1.01
+  plot(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, xlim = ff(c(0,mx)),
+       ylim = ff(c(0,mx)), xaxt = "n", yaxt = "n", xlab = xlb, ylab = ylb, cex = cx, main = tl)
   axis(1, ff(10^c(0:5)), 10^c(0:5))
   axis(2, ff(10^c(0:5)), 10^c(0:5))
   segments(ff(0), ff(0), ff(10^5), ff(10^5))
@@ -232,36 +275,42 @@ scatter100m = function(yy, gold=ddpop100, clr = gry, ff=ff1, offset=0,cx=.7, lgn
   segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
 
   scatter100m.add(yy,gold,clr,ff,offset,cx)
-  if(lgn==TRUE)
-  legend('topleft', legend =  c('HRSL', 'Landscan', 'WorldPop'), col=col[c(7,5,3)],
-         lty=1, lwd=2, cex=1, bg="white", box.col="white")
+  if (lgn) {
+    legend('topleft', legend =  c('HRSL', 'Landscan', 'WorldPop'), col = col[c(7,5,3)],
+           lty = 1, lwd = 2, cex = 1, bg = "white", box.col = "white")
+  }
 }
 
-scatter100m.add = function(yy, gold=ddpop100, clr = gry, ff=ff1, offset = 0, cx =.7){
-  points(ff(gold,offset), ff(yy,offset), col = clr, pch =15, cex=cx) 
+scatter100m.add <- function(yy, gold = ddpop100, clr = gry, ff = ff1, offset = 0, cx = .7){
+  points(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, cex = cx) 
 }
 ```
 
 ```{r, fig.height=6, fig.width=6}
-wpclr = col[3]
-gry = grey(0.8)
-scatter1kFigure = function(){
-cxx=.5
-par(mfrow = c(3,2), mar = c(5,4.2,3,2))
-scatter1k(popk$lspop,cx=cxx, lgn=TRUE, tl="A")
-scatter1k.add(popk$popfb, cid=7,cx=cxx)
-scatter1k.add(popk$wppop, cid=3,cx=cxx)
-scatter100m.add(ddwppop, clr=wpclr, cx=cxx/2)
-scatter100m.add(ddpopfb, clr=fbclr, cx=cxx/2)
-scatter1k(popk$lspop,cx=cxx, tl="B) Landscan")
-scatter1k(popk$popfb, cid=7,cx=cxx,tl="C) HRSL",lgn=FALSE)
-scatter100m.add(ddpopfb, clr=gry, cx=cxx/2)
-scatter1k.add(popk$popfb, cid=7,cx=cxx)
-scatter1k(popk$wppop, cid=3,cx=cxx, tl="D) WorldPOP")
-scatter100m.add(ddwppop, clr=gry, cx=cxx/2)
-scatter1k.add(popk$wppop, cid=3,cx=cxx)
-scatter100m(popm$popfb, gold=popm$pop100, xlb="BIMEP 100x100 m", ylb = "Population Size", clr=fbclr,cx=cxx/2, tl="E) HRSL, 100x100 m")
-scatter100m(popm$wppop, gold=popm$pop100, xlb="BIMEP 100x100 m", ylb = "Population Size", clr=wpclr,cx=cxx/2, tl = "F) WP, 100x100 m")
+wpclr <- col[3]
+gry <- grey(0.8)
+
+scatter1kFigure <- function(){
+  cxx <- .5
+  par(mfrow = c(3,2), mar = c(5,4.2,3,2))
+  scatter1k(popk$lspop, cx = cxx, lgn = TRUE, tl = "A")
+  scatter1k.add(popk$popfb, cid = 7, cx = cxx)
+  scatter1k.add(popk$wppop, cid = 3, cx = cxx)
+  scatter100m.add(ddwppop, clr = wpclr, cx = cxx/2)
+  scatter100m.add(ddpopfb, clr = fbclr, cx = cxx/2)
+  scatter1k(popk$lspop,cx = cxx, tl = "B) Landscan")
+  scatter1k(popk$popfb, cid = 7,cx = cxx, tl = "C) HRSL", lgn=FALSE)
+  scatter100m.add(ddpopfb, clr = gry, cx = cxx/2)
+  scatter1k.add(popk$popfb, cid = 7,cx = cxx)
+  scatter1k(popk$wppop, cid = 3,cx = cxx, tl = "D) WorldPOP")
+  scatter100m.add(ddwppop, clr = gry, cx = cxx/2)
+  scatter1k.add(popk$wppop, cid = 3, cx = cxx)
+  scatter100m(popm$popfb, gold=popm$pop100,
+              xlb = "BIMEP 100x100 m", ylb = "Population Size",
+              clr = fbclr,cx = cxx/2, tl = "E) HRSL, 100x100 m")
+  scatter100m(popm$wppop, gold = popm$pop100,
+              xlb = "BIMEP 100x100 m", ylb = "Population Size",
+              clr = wpclr, cx = cxx/2, tl = "F) WP, 100x100 m")
 }
 
 
@@ -273,9 +322,9 @@ scatter1kFigure()
 ```
 
 ```{r}
-pdf("scatter1k.pdf", height=12, width=9)
+pdf("scatter1k.pdf", height = 12, width=9)
 scatter1kFigure() 
-a=dev.off(dev.cur())
+a <- dev.off(dev.cur())
 ```
 
 
@@ -332,36 +381,36 @@ We would like to develop some metrics to measure the accuracy of maps. We start 
 ## Population by Area 
 
 ```{r}
-cdfAreaPlot = function(H, clr ="black", llwd=2, lt=1, lb=""){
-  H = sort(H)
-  CDF = cumsum(H)
-  area =  c(1:length(H))/length(H)
-  plot(area, cumsum(H)/sum(H), type = "l", xlab =  "% Area", ylab =  "Proportion of Population", 
-       main = lb, lwd=llwd, col = clr, lty = lt)
+cdfAreaPlot <- function(H, clr ="black", llwd = 2, lt = 1, lb = "") {
+  H <- sort(H)
+  CDF <- cumsum(H)
+  area <-  c(1:length(H)) / length(H)
+  plot(area, cumsum(H) / sum(H), type = "l", xlab =  "% Area", ylab =  "Proportion of Population", 
+       main = lb, lwd = llwd, col = clr, lty = lt)
 }
 
-cdfAreaLines = function(H, clr ="black", llwd=2, lt=1){
-  H = sort(H)
-  CDF = cumsum(H)
-  area =  c(1:length(H))/length(H)
-  lines(area, cumsum(H)/sum(H), col = clr, lwd=llwd, lty = lt)
+cdfAreaLines <- function(H, clr ="black", llwd = 2, lt= 1) {
+  H <- sort(H)
+  CDF <- cumsum(H)
+  area <-  c(1:length(H)) / length(H)
+  lines(area, cumsum(H) / sum(H), col = clr, lwd = llwd, lty = lt)
 }
 ```
 
 
 
 ```{r}
-cdfAreaFigure = function(llwd=1, lb=""){ 
-  cdfAreaPlot(popk$pop1k, clr = col[1], llwd=llwd, lb=lb)
-  cdfAreaLines(popm$pop100, clr = col[1], llwd=llwd, lt = 2)
-  cdfAreaLines(popk$wppop, clr = col[3], llwd=llwd)
-  cdfAreaLines(popm$wppop, clr = col[3], llwd=llwd, lt = 2)
-  cdfAreaLines(popk$lspop, clr = col[5], llwd=llwd)
-  cdfAreaLines(popk$popfb, clr = col[7], llwd=llwd)
-  cdfAreaLines(popm$popfb, clr = col[7], llwd=llwd, lt = 2)
+cdfAreaFigure <- function(llwd = 1, lb = "") { 
+  cdfAreaPlot(popk$pop1k, clr = col[1], llwd = llwd, lb=lb)
+  cdfAreaLines(popm$pop100, clr = col[1], llwd = llwd, lt = 2)
+  cdfAreaLines(popk$wppop, clr = col[3], llwd = llwd)
+  cdfAreaLines(popm$wppop, clr = col[3], llwd = llwd, lt = 2)
+  cdfAreaLines(popk$lspop, clr = col[5], llwd = llwd)
+  cdfAreaLines(popk$popfb, clr = col[7], llwd = llwd)
+  cdfAreaLines(popm$popfb, clr = col[7], llwd = llwd, lt = 2)
   #cdfAreaLines(dpop100, clr = "pink", llwd=2*llwd, lt = 2)
-  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
-         lty=1, lwd=2, cex=1)
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col = col[c(1,7,5,3)],
+         lty = 1, lwd = 2, cex = 1)
 }
 
 cdfAreaFigure(2)
@@ -369,13 +418,13 @@ cdfAreaFigure(2)
 
 How does the smoothed surface compare with the $1\;km$ surface? I 
 ```{r}
-SmoothFigure = function(llwd=1, lb=""){ 
-  cdfAreaPlot(popk$pop1k, clr = "blue", llwd=llwd, lb=lb, lt=3)
-  cdfAreaLines(dpop100, clr = "pink", llwd= llwd, lt = 2)
-  cdfAreaLines(popm$pop100, clr = "red", llwd=llwd, lt = 2)
-  cdfAreaLines(popk$pop1k, clr = "black", llwd=llwd, lt = 3)
-  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
-         lty=1, lwd=2, cex=1)
+SmoothFigure <- function(llwd = 1, lb = "") { 
+  cdfAreaPlot(popk$pop1k, clr = "blue", llwd = llwd, lb = lb, lt = 3)
+  cdfAreaLines(dpop100, clr = "pink", llwd = llwd, lt = 2)
+  cdfAreaLines(popm$pop100, clr = "red", llwd = llwd, lt = 2)
+  cdfAreaLines(popk$pop1k, clr = "black", llwd = llwd, lt = 3)
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col = col[c(1,7,5,3)],
+         lty = 1, lwd = 2, cex = 1)
 }
 SmoothFigure(2)
 
@@ -388,102 +437,108 @@ SmoothFigure(2)
 
 ```{r}
 
-cdfDens = function(H, pw=2){
-  H = sort(H)
-  mx = ceiling(log(max(H), base=pw))
+cdfDens <- function(H, pw = 2){
+  H <- sort(H)
+  mx <- ceiling(log(max(H), base = pw))
   #print(c(mx=mx,pw=pw))
   #browser() 
-  c2 = 1:mx
-  ixz = which(H==0)
-  Pz = length(ixz)
-  for(i in c2){
-    ix = which(H<pw^i) 
-    Pz = c(Pz,sum(H[ix]))
+  c2 <- 1:mx
+  ixz <- which(H == 0)
+  Pz <- length(ixz)
+  for (i in c2) {
+    ix <- which(H < pw^i) 
+    Pz <- c(Pz, sum(H[ix]))
   }
-  pop = c(0, pw^c2)
+  pop <- c(0, pw^c2)
   cbind(pop, Pz)
 }
 
-cdfDensPlot = function(H, pw=2, clr="black", llwd=2, lt=1, lb=""){
-  H = sort(H)
-  dd = cdfDens(H,pw)[-1,]
-  P = dd[,1]
-  H = dd[,2]
-  l = log10(max(H))
-  plot(P, H/max(H), log = "x", type = "l", xlab = "log(Pop Dens)", xaxt="n", ylab = "Proportion of Population", main = lb, col = clr, lwd=llwd, lty=lt)
+cdfDensPlot <- function(H, pw = 2, clr = "black", llwd = 2, lt = 1, lb = "") {
+  H <- sort(H)
+  dd <- cdfDens(H,pw)[-1,]
+  P <- dd[,1]
+  H <- dd[,2]
+  l <- log10(max(H))
+  plot(P, H / max(H), log = "x", type = "l", xlab = "log(Pop Dens)",
+       xaxt = "n", ylab = "Proportion of Population",
+       main = lb, col = clr, lwd = llwd, lty = lt)
   #axis(1, 10^(0:l)+0.5, 10^c(0:l))
-  axis(1, 10^(0:(l+1))+0.5, str10[1:(l+2)])
+  axis(1, 10^(0:(l + 1)) + 0.5, str10[1:(l + 2)])
 }
 
-cdfDensLines = function(H, pw=2, clr="black", llwd=2, lt=1){
-  dd = cdfDens(H,pw)[-1,]
-  P = dd[,1]
-  H = dd[,2]
-  l = log10(max(H))
-  lines(P, H/max(H), col = clr, lwd=llwd, lty=lt)
+cdfDensLines <- function(H, pw = 2, clr = "black", llwd = 2, lt = 1) {
+  dd <- cdfDens(H,pw)[-1,]
+  P <- dd[,1]
+  H <- dd[,2]
+  l <- log10(max(H))
+  lines(P, H / max(H), col = clr, lwd = llwd, lty = lt)
 }
 
-cdfDensFigure = function(llwd=1,lb=""){ 
-  cdfDensPlot(popk$lspop, pw=2, clr = col[5], llwd=llwd,lb=lb)
-  cdfDensLines(ddpop100, pw=2, clr = col[1], llwd=llwd, lt = 2)
-  cdfDensLines(popk$pop1k, pw=2, clr = col[1], llwd=llwd)
-  cdfDensLines(popk$wppop, pw=2,  clr = col[3], llwd=llwd)
-  cdfDensLines(ddwppop, pw=2,  clr = col[3], llwd=llwd, lt = 2)
+cdfDensFigure <- function(llwd = 1, lb = ""){ 
+  cdfDensPlot(popk$lspop, pw = 2, clr = col[5], llwd = llwd, lb = lb)
+  cdfDensLines(ddpop100, pw = 2, clr = col[1], llwd = llwd, lt = 2)
+  cdfDensLines(popk$pop1k, pw = 2, clr = col[1], llwd = llwd)
+  cdfDensLines(popk$wppop, pw = 2,  clr = col[3], llwd = llwd)
+  cdfDensLines(ddwppop, pw = 2,  clr = col[3], llwd = llwd, lt = 2)
 
-  cdfDensLines(popk$popfb, pw=2,  clr = col[7], llwd=llwd)
-  cdfDensLines(ddpopfb, pw=2,  clr = col[7], llwd=llwd, lt = 2)
-  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
-         lty=1, lwd=2, cex=1)
+  cdfDensLines(popk$popfb, pw = 2,  clr = col[7], llwd = llwd)
+  cdfDensLines(ddpopfb, pw = 2,  clr = col[7], llwd = llwd, lt = 2)
+  legend('topleft', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'),
+         col = col[c(1,7,5,3)], lty = 1, lwd = 2, cex = 1)
 }
 
 cdfDensFigure(2)
 ```
 
 ```{r}
-landAA =  function(H, rural1=50, rural2 = 250, urban=1000, area=1){
-  ixz = which(H==0)
-  Pz = length(ixz)
-  HH = H[-ixz]
+landAA <- function(H, rural1 = 50, rural2 = 250, urban = 1000, area = 1) {
+  ixz <- which(H == 0)
+  Pz <- length(ixz)
+  HH <- H[-ixz]
   
-  ixz = which(HH < rural1/area)
-  if(length(ixz>0)){
-    Pz = c(Pz, length(ixz))
-    HH = HH[-ixz]
+  ixz <- which(HH < rural1 / area)
+  if (length(ixz>0)) {
+    Pz <- c(Pz, length(ixz))
+    HH <- HH[-ixz]
   } else {
-    Pz = c(Pz,0)
+    Pz <- c(Pz,0)
   }
   
-  ixz = which(HH < rural2/area)
-  if(length(ixz>0)){
-    Pz = c(Pz, length(ixz))
-    HH = HH[-ixz]
+  ixz <- which(HH < rural2 / area)
+  if (length(ixz > 0)) {
+    Pz <- c(Pz, length(ixz))
+    HH <- HH[-ixz]
   } else {
-    Pz = c(Pz,0)
+    Pz <- c(Pz,0)
   }
   
-  ixz = which(HH < urban/area)
-  Pz = c(Pz, length(ixz))
-  HH = HH[-ixz]
+  ixz <- which(HH < urban / area)
+  Pz <- c(Pz, length(ixz))
+  HH <- HH[-ixz]
   
   c(Pz, length(HH))
 }
 
-pdfAreaPlot = function(H, rural1=50, rural2=250, urban=1000, area=1, llwd=3, lt=1, clr = "black", offset=0, lb=""){
-  Pz = landAA(H, rural1, rural2, urban, area)/length(H)
+pdfAreaPlot <- function(
+  H, rural1 = 50, rural2 = 250, urban = 1000, area = 1,
+  llwd = 3, lt = 1, clr = "black", offset = 0, lb = ""
+  )
+  {
+  Pz <- landAA(H, rural1, rural2, urban, area) / length(H)
   plot(2:6 + offset, Pz, ylim = c(0, 1), xaxt = "n",  ylab = "Proportion",
   #plot(2:6 + offset, sqrt(Pz), ylim = c(0, 1), xaxt = "n", yaxt = "n", ylab =  expression(sqrt(Proportion)),
-       xlim = c(1,7), type = "h", lwd=llwd, col=clr, lty=lt, xlab =  "", main = lb)
+       xlim = c(1,7), type = "h", lwd = llwd, col = clr, lty = lt, xlab =  "", main = lb)
   axis(1, c(2, 2:5 + 0.5), c(0,1,50,250,1000))
-  xx = c(.01, .1, .2, .5, .75) 
+  xx <- c(.01, .1, .2, .5, .75) 
   #axis(2, sqrt(xx), xx)
   #axis(2, xx, xx)
   #axis(2, sqrt(c(.01, .05, .2, .5)), c("1%", "5%", "20%", "50%"))
   
   
-  makebox = function(x1,x2){
-    xx = c(x1, x1, x2, x2)
-    yy = c(0,1,1,0)
-    cbind(xx,yy)
+  makebox <- function(x1, x2){
+    xx <- c(x1, x1, x2, x2)
+    yy <- c(0,1,1,0)
+    cbind(xx, yy)
   }
   polygon(makebox(5.5,6.5), border = NA, col = "aliceblue")
   polygon(makebox(4.5,5.5), border = NA, col = "cornsilk")
@@ -497,31 +552,35 @@ pdfAreaPlot = function(H, rural1=50, rural2=250, urban=1000, area=1, llwd=3, lt=
   
 }
 
-pdfAreaLines = function(H, rural1=100, rural2=250, urban=1000, area=1, llwd=3, lt=1, clr = "black", offset=0){
-  Pz = landAA(H, rural1, rural2, urban, area)/length(H)
+pdfAreaLines <- function(
+  H, rural1 = 100, rural2 = 250, urban = 1000, area = 1,
+  llwd = 3, lt = 1, clr = "black", offset = 0
+  )
+  {
+  Pz <- landAA(H, rural1, rural2, urban, area) / length(H)
   #lines(2:6 + offset, sqrt(Pz), type = "h", lwd=llwd, col=clr, lty=lt)
-  lines(2:6 + offset, Pz, type = "h", lwd=llwd, col=clr, lty=lt)
+  lines(2:6 + offset, Pz, type = "h", lwd = llwd, col = clr, lty = lt)
 }
 
-pdfAreaFigure = function(lb = ""){ 
-  pdfAreaPlot(popk$pop1k, llwd=5, clr = col[1], offset=-.21, lb=lb)
-  pdfAreaLines(popk$pop1k, llwd=5, clr = col[1], offset=-0.21)
+pdfAreaFigure <- function(lb = ""){ 
+  pdfAreaPlot(popk$pop1k, llwd = 5, clr = col[1], offset = -.21, lb = lb)
+  pdfAreaLines(popk$pop1k, llwd = 5, clr = col[1], offset = -0.21)
   #pdfAreaLines(popm$pop1k, llwd=4, clr = col[1], offset=-.2, area=0.01, lt=5) ### REMOVING 100m BARS FOR NOW
-  pdfAreaLines(popk$wppop, llwd=5, clr = col[3], offset=0.21)
+  pdfAreaLines(popk$wppop, llwd = 5, clr = col[3], offset = 0.21)
   #pdfAreaLines(popm$wppop, llwd=4, clr = col[3], offset=0, area=0.01, lt=5) ### REMOVING 100m BARS 
-  pdfAreaLines(popk$lspop, llwd=5, clr = col[5], offset=.07)
-  pdfAreaLines(popk$popfb, llwd=5, clr = col[7], offset=-.07)
+  pdfAreaLines(popk$lspop, llwd = 5, clr = col[5], offset = .07)
+  pdfAreaLines(popk$popfb, llwd = 5, clr = col[7], offset = -.07)
   #pdfAreaLines(popm$popfb, llwd=4, clr = col[7], offset=.3, area=0.01, lt=5) ### REMOVING 100m BARS
-  legend('topright', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col=col[c(1,7,5,3)],
-         lty=1, lwd=2, cex=1, bg="white")
+  legend('topright', legend =  c('BIMEP', 'HRSL', 'Landscan', 'WorldPop'), col = col[c(1,7,5,3)],
+         lty = 1, lwd = 2, cex = 1, bg = "white")
 }
 
 pdfAreaFigure() 
 
-pdf("AccuracyProfile.pdf", height=8, width=9)
+pdf("AccuracyProfile.pdf", height = 8, width = 9)
 par(mar = c(5,5,3,2))
 pdfAreaFigure() 
-a=dev.off(dev.cur())
+a <- dev.off(dev.cur())
 ```
 
 
