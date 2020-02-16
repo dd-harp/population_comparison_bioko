@@ -1,10 +1,6 @@
 ---
-title: "Get Bioko data"
-output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Get Bioko data}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+title: "Get Data"
+output: html_notebook
 ---
 
 ```{r, include = FALSE}
@@ -60,6 +56,8 @@ hrsl_raster <- read_hrsl()
 hrsl_points_sf <- hrsl_points(hrsl_raster)
 hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
 grids$coarse["hrsl"] <- hrsl_points_sf[[1]]
-tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) + tm_polygons("hrsl", title = "HRSL", palette = "Greens", style = "log10") + tm_layout(legend.title.size = 1, legend.text.size = 1)
+tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) +
+  tm_polygons("hrsl", title = "HRSL", palette = "Greens", style = "log10") +
+  tm_layout(legend.title.size = 1, legend.text.size = 1)
 ```
 
