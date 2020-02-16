@@ -22,6 +22,7 @@ Imports:
     viridis
 Suggests: 
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 2.1.0)
 VignetteBuilder: knitr
 RoxygenNote: 7.0.1

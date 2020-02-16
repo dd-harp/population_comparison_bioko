@@ -3,6 +3,9 @@ library(curl)
 
 
 #' Reads configuration file on where to download data.
+#' It stores that configuration in `data_config`
+#' at the global level.
+#'
 #' If you want to make the config file, then create
 #' a file called `$HOME/.config/MASH/data.ini` and put
 #' the following in it:
@@ -11,6 +14,9 @@ library(curl)
 #' SCPHOST = computer-name.ihme.uw.edu
 #' SCPHOSTBASE = /path/to/data/directory
 #' ```
+#'
+#' @return A list of configuration parameters.
+#' @export
 data_configuration <- function() {
   home <- list(
     xdg = Sys.getenv("XDG_CONFIG_HOME"),
@@ -23,8 +29,8 @@ data_configuration <- function() {
     if (file.exists(ini_path)) {
       cfg <- configr::read.config(ini_path)
       if (is.list(cfg)) {
-        data_configuration <<- cfg$Default
-        return(data_configuration)
+        data_config <<- cfg$Default
+        return(data_config)
       }
     }
   }
@@ -40,6 +46,7 @@ data_configuration <- function() {
 #' @param where Directory into which to unzip the archive.
 #'     This command changes the working directory to `where`
 #'     in order to unzip.
+#' @export
 un7zip <- function(archive, where) {
   archive <- normalizePath(archive)
   current_path <- setwd(where)
@@ -53,9 +60,13 @@ un7zip <- function(archive, where) {
 #' Equivalent to: ssh ihme.uw.edu:/path/to/file local_file.dat
 #'
 #' You have to call `data_configuration()` before you call this.
+#'
+#' @param filename The path of the file within the repository.
+#' @param local_directory Where to put that file on the local machine.
+#' @export
 get_from_ihme <- function(filename, local_directory = "inst/extdata") {
-  base_directory <- fs::path(data_configuration$SCPHOSTBASE, "equatorial_guinea")
-  host <- data_configuration$SCPHOST
+  base_directory <- fs::path(data_config$SCPHOSTBASE, "equatorial_guinea")
+  host <- data_config$SCPHOST
   target <- fs::path(base_directory, filename)
   local_file <- fs::path(local_directory, filename)
   system(paste("scp", paste(host, target, sep = ":"), local_file, sep = " "))
@@ -67,6 +78,9 @@ get_from_ihme <- function(filename, local_directory = "inst/extdata") {
 #' 10 or 15 is 2010 or 2015 data.
 #' adjv2 or v2 is whether it was adjusted to match WHO.
 #' So use GNQ15v2.tif.
+#' @param local directory Where to put that file on the local machine.
+#' @param overwrite Whether to overwrite an existing file by the same name.
+#' @export
 download_worldpop <- function(local_directory = "inst/extdata", overwrite = FALSE) {
   local_file <- fs::path(local_directory, "Equatorial_Guinea_100m_Population.7z")
   worldpop_directory <- fs::path_ext_remove(local_file)
@@ -86,6 +100,8 @@ download_worldpop <- function(local_directory = "inst/extdata", overwrite = FALS
 #' Bioko grids are two shapefiles in UTM zone 32N projection.
 #' The 100m grids are secs.shp and the 1km are mapareas.shp.
 #' The two grids align in this projection.
+#' @param local directory Where to put that file on the local machine.
+#' @export
 download_bioko_grids <- function(local_directory = "inst/extdata") {
   filename <- "Bioko_grids.zip"
   local_path <- fs::path(local_directory, filename)
@@ -100,6 +116,10 @@ download_bioko_grids <- function(local_directory = "inst/extdata") {
 }
 
 
+#' Read the Bioko grid information as a shapefile.
+#' @param local directory Where to put that file on the local machine.
+#' @return a list with the `fine` and `coarse` shapefiles.
+#' @export
 read_bioko_grids <- function(local_directory = "inst/extdata") {
   grid_dir <- fs::path(local_directory, "Bioko_grids")
   fine_grid <- sf::st_read(dsn = fs::path(grid_dir, "secs.shp"), layer = "secs")
@@ -108,7 +128,10 @@ read_bioko_grids <- function(local_directory = "inst/extdata") {
 }
 
 
+#' Download HRSL from the repository.
 #' HRSL is a geotiff in WGS 84 for all of Equatorial Guinea (GNQ).
+#' @param local directory Where to put that file on the local machine.
+#' @export
 download_hrsl_points <- function(local_directory = "inst/extdata") {
   filename <- "population_gnq_2018-10-01.zip"
   local_path <- fs::path(local_directory, filename)
@@ -118,7 +141,10 @@ download_hrsl_points <- function(local_directory = "inst/extdata") {
   unzip(local_path, exdir = local_directory)
 }
 
-
+#' Read the HRSL as a raster file.
+#' @param local directory Where to put that file on the local machine.
+#' @return a `raster::raster` file.
+#' @export
 read_hrsl <- function(local_directory = "inst/extdata") {
   raster::raster(fs::path(local_directory, "population_gnq_2018-10-01.tif"))
 }
