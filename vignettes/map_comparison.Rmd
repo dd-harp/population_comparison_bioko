@@ -1,0 +1,15 @@
+---
+title: "The Accuracy of Human Population Density Maps : Detailed Methods"
+author: "David L Smith, Carlos Guerra, Andrew Dolgert, Brendan Fries"
+date: "9/18/2019"
+output:
+  pdf_document: default
+  html_document: default
+params:
+  source_data: /home/adolgert/dev/popbioko/inst/extdata/source
+---
+
+# Overview
+
+This notebook calculates metrics from a population density map
+by comparing them with a gold standard map. The maps are

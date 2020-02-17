@@ -25,7 +25,42 @@ library(GISTools)
 
 # Overview
 This notebook retrieves input data and converts it into
-gridded data about population density.
+gridded data about population density. This notebook should retrieve
+and clean data so that we can pass that to another notebook to do statistics.
+The gold standard dataset is BIMEP, so we will re-grid the BIMEP data
+onto the same grids as the other datasets.
+
+The output is all GeoTIFFs.
+
+- `hrsl_bimep.tif`, with HRSL and BIMEP on the 1 km grid that BIMEP
+  defined.
+- `landscan_bimep.tif`, with the BIMEP data on LandScan's 1 km grid.
+- `landscan_crop.tif`, with the LandScan data, cropped to Bioko's
+  bounds. This is in a separate GeoTIFF because the data types are integer and float.
+- `worldpop_bimep.tif`, with two layers, one for WorldPop and one for
+  BIMEP on the WorldPop grid, cropped to the Bioko boundary.
+  This is on a 1 km grid.
+- `hrsl_crop.tif`, which is HRSL cropped to the Bioko boundary,
+  This is on a 100 m grid.
+- `worldpop_crop.tif`, which is WorldPop cropped to the Bioko boundary,
+  on a 100 m grid.
+
+We have to take care with borders. All datasets are counts
+of people in a pixel. On borders with the water, these counts
+will be low, even if the density of people on land is high.
+We shouldn't calculate people per square meter of habitable land.
+
+The size of each GeoTIFF will differ between LandScan, HRSL,
+and WorldPop, but each has a matched BIMEP dataset.
+Pixels in the water should be marked as NA and excluded from
+calculations later.
+
+All work will use pixels in latitude and longitude (lat-long). This
+is also known as an unprojected space. We'll need to
+transform the BIMEP projection to lat-long, but the rest
+are already in lat-long, and the BIMEP coarse and fine grids
+are rectilinear in lat-long.
+
 
 # Get Datasets
 Specify a directory into which to put the data.
@@ -52,6 +87,17 @@ download_worldpop(local_directory = data_dir)
 download_bioko_grids(local_directory = data_dir)
 download_hrsl_points(local_directory = data_dir)
 ```
+# Load BIMEP Early
+
+The BIMEP data will have a "pop" feature for the population in the pixel.
+Load it now so that we have its bounding box.
+
+```{r bimep_raster}
+bimep_feature <- bimep_population_as_points(local_directory = data_dir)
+names(bimep_feature)
+```
+We see the population as `pop` and the other column, which is the geometry
+for each point.
 
 # Align HRSL and BIMEP to BIMEP 1k Grid
 The Bioko grids define cells where BIMEP assigns residents of
@@ -109,9 +155,12 @@ raster::projection(km_raster) <- lat_long_proj
 Let's get some points to project to that raster.
 ```{r hrsl_plot}
 hrsl_raster <- read_hrsl(local_directory = data_dir)
-hrsl_points_sf <- hrsl_points(hrsl_raster)
-hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
+hrsl_raster_crop <- raster::crop(hrsl_raster, bimep_feature, snap = "out")
+hrsl_points_sf <- hrsl_points(hrsl_raster_crop)
+# hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
+plot(hrsl_raster_crop)
 ```
+
 
 And do the projection using a builtin function of the raster package.
 ```{r project_to_raster}
@@ -127,12 +176,6 @@ km_hrsl_raster <- raster::rasterize(
 plot(km_hrsl_raster)
 ```
 
-Now do the same thing for the BIMEP data. It will have a "pop"
-feature for the population in the pixel.
-```{r bimep_raster}
-bimep_feature <- bimep_population_as_points(local_directory = data_dir)
-names(bimep_feature)
-```
 Rasterize that pop feature, summing it per pixel.
 ```{r}
 bimep_raster <- raster::rasterize(
@@ -152,7 +195,19 @@ Write these as layers to a GeoTIFF.
 names(km_hrsl_raster) <- c("HRSL")
 names(bimep_raster) <- c("BIMEP")
 both_layers <- raster::addLayer(km_hrsl_raster, bimep_raster)
-raster::writeRaster(both_layers, filename = fs::path(data_dir, "hrsl_bimep"), format = "GTiff")
+raster::writeRaster(
+  both_layers,
+  filename = fs::path(data_dir, "hrsl_bimep"),
+  format = "GTiff",
+  overwrite = TRUE
+  )
+names(hrsl_raster_crop) <- "HRSL"
+raster::writeRaster(
+  hrsl_raster_crop,
+  filename = fs::path(data_dir, "hrsl_crop"),
+  format = "GTiff",
+  overwrite = TRUE
+  )
 ```
 
 
@@ -193,7 +248,18 @@ plot(bimep_landscan_raster)
 names(bimep_landscan_raster) <- c("HRSL")
 names(landscan) <- c("LandScan")
 bls_layers <- raster::addLayer(landscan, bimep_landscan_raster)
-raster::writeRaster(bls_layers, filename = fs::path(data_dir, "landscan_bimep"), format = "GTiff")
+raster::writeRaster(
+  bimep_landscan_raster,
+  filename = fs::path(data_dir, "landscan_bimep"),
+  format = "GTiff",
+  overwrite = TRUE
+  )
+raster::writeRaster(
+  landscan,
+  filename = fs::path(data_dir, "landscan_crop"),
+  format = "GTiff",
+  overwrite = TRUE
+  )
 ```
 
 # BIMEP Data on WorldPop Raster
@@ -213,17 +279,37 @@ plot(worldpop_1km)
 ```
 Now put the BIMEP on this raster.
 ```{r bimep_on_worldpop}
-bimep_landscan_raster <- raster::rasterize(
+bimep_worldpop_raster <- raster::rasterize(
   bimep_feature,
   worldpop_1km,
   field = "pop",
   fun = sum
   )
-names(bimep_landscan_raster)
+names(bimep_worldpop_raster)
 ```
 
 ```{r}
-plot(bimep_landscan_raster)
+plot(bimep_worldpop_raster)
+```
+
+```{r}
+names(worldpop_1km) <- "WorldPop"
+names(bimep_worldpop_raster) <- "BIMEP"
+wp_layers <- raster::addLayer(worldpop_1km, bimep_worldpop_raster)
+raster::writeRaster(
+  wp_layers,
+  filename = fs::path(data_dir, "worldpop_bimep"),
+  format = "GTiff",
+  overwrite = TRUE
+  )
+# Save the 100m WorldPop, cropped to Bioko.
+names(worldpop) <- "WorldPop"
+raster::writeRaster(
+  worldpop,
+  filename = fs::path(data_dir, "worldpop_crop"),
+  format = "GTiff",
+  overwrite = TRUE
+  )
 ```
 
 
