@@ -53,6 +53,7 @@ download_bioko_grids(local_directory = data_dir)
 download_hrsl_points(local_directory = data_dir)
 ```
 
+# Align HRSL and BIMEP to BIMEP 1k Grid
 The Bioko grids define cells where BIMEP assigns residents of
 the island. One is a 1 km grid, the other a 100 m grid.
 If we read those grids, we can see that the input files
@@ -153,6 +154,34 @@ tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) +
   tm_polygons("hrsl", title = "HRSL", palette = "Greens", style = "log10") +
   tm_layout(legend.title.size = 1, legend.text.size = 1)
 ```
+
+# Align BIMEP to LandScan Grid
+
+The LandScan grid is an Arc/Info Binary Grid, so it's the adf type.
+It uses pixel sizes of 0.008333 in both dimensions.
+It's the whole world, so we will subset it.
+
+```{r landscan}
+landscan <- read_landscan(local_directory = data_dir)
+landscan <- raster::crop(landscan, bimep_feature, snap = "out")
+plot(landscan)
+```
+Now put the bimep 100m data on the LandScan raster.
+```{r}
+bimep_landscan_raster <- raster::rasterize(
+  bimep_feature,
+  landscan,
+  field = "pop",
+  fun = sum
+  )
+names(bimep_landscan_raster)
+```
+```{r}
+plot(bimep_landscan_raster)
+```
+
+
+
 
 # Look at the Incoming Data
 

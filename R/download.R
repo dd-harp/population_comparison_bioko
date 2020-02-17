@@ -161,3 +161,13 @@ download_hrsl_points <- function(local_directory = "inst/extdata") {
 read_hrsl <- function(local_directory = "inst/extdata") {
   raster::raster(fs::path(local_directory, "population_gnq_2018-10-01.tif"))
 }
+
+
+#' Load LandScan raster file.
+
+#' @param local directory Where to put that file on the local machine.
+#' @return a `raster::raster` file.
+#' @export
+read_landscan <- function(local_directory = "inst/extdata") {
+  raster::raster(fs::path(local_directory, "LandScan Global 2018", "lspop2018"))
+}
