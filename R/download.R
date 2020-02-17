@@ -3,19 +3,21 @@ library(curl)
 
 
 #' Reads configuration file on where to download data.
+#'
 #' It stores that configuration in `data_config`
 #' at the global level.
 #'
 #' If you want to make the config file, then create
 #' a file called `$HOME/.config/MASH/data.ini` and put
 #' the following in it:
-#' ```
+#'
+#' @return A list of configuration parameters.
+#'
+#' @example
 #' [Default]
 #' SCPHOST = computer-name.ihme.uw.edu
 #' SCPHOSTBASE = /path/to/data/directory
-#' ```
 #'
-#' @return A list of configuration parameters.
 #' @export
 data_configuration <- function() {
   home <- list(
@@ -38,7 +40,9 @@ data_configuration <- function() {
 }
 
 
-#' Unzip a 7zip file. There is a Github project called archive
+#' Unzip a 7zip file.
+#'
+#' There is a Github project called archive
 #' that would do this, too. This command is on Ubuntu but may
 #' not be elsewhere.
 #'
@@ -55,7 +59,9 @@ un7zip <- function(archive, where) {
 }
 
 
-#' Use scp to retrieve data, if you have ssh credentials set up.
+#' Use scp to retrieve data.
+#'
+#' Only if you have ssh credentials set up.
 #' This is used for data that isn't yet public.
 #' Equivalent to: ssh ihme.uw.edu:/path/to/file local_file.dat
 #'
@@ -73,6 +79,8 @@ get_from_ihme <- function(filename, local_directory = "inst/extdata") {
 }
 
 
+#' Retrieve worldpop data.
+#'
 #' Worldpop returns several GeoTIFFs in WGS 84.
 #' GNQ = Equatorial Guinea
 #' 10 or 15 is 2010 or 2015 data.
@@ -97,6 +105,8 @@ download_worldpop <- function(local_directory = "inst/extdata", overwrite = FALS
 }
 
 
+#' Retrieve Bioko grid data.
+#'
 #' Bioko grids are two shapefiles in UTM zone 32N projection.
 #' The 100m grids are secs.shp and the 1km are mapareas.shp.
 #' The two grids align in this projection.
@@ -117,6 +127,7 @@ download_bioko_grids <- function(local_directory = "inst/extdata") {
 
 
 #' Read the Bioko grid information as a shapefile.
+#'
 #' @param local directory Where to put that file on the local machine.
 #' @return a list with the `fine` and `coarse` shapefiles.
 #' @export
@@ -129,6 +140,7 @@ read_bioko_grids <- function(local_directory = "inst/extdata") {
 
 
 #' Download HRSL from the repository.
+#'
 #' HRSL is a geotiff in WGS 84 for all of Equatorial Guinea (GNQ).
 #' @param local directory Where to put that file on the local machine.
 #' @export
@@ -142,6 +154,7 @@ download_hrsl_points <- function(local_directory = "inst/extdata") {
 }
 
 #' Read the HRSL as a raster file.
+#'
 #' @param local directory Where to put that file on the local machine.
 #' @return a `raster::raster` file.
 #' @export

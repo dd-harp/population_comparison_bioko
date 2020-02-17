@@ -1,9 +1,13 @@
 ---
 title: "Get Data"
-output: html_notebook
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+cache: yes
 ---
 
-```{r, include = FALSE}
+```{r knitr_options, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -12,19 +16,25 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(popbioko)
+library(rprojroot)
 library(sp)
 library(sf)
+library(tmap)
 library(GISTools)
 ```
 
 This shows how to get the incoming data and takes a look at it.
+```{r data_dir}
+data_dir <- fs::path(rprojroot::find_root(rprojroot::is_rstudio_project), "inst", "extdata")
+```
+The data will come from `$r data_dir$`.
 
 If you have an account at IHME, the following will copy files to
 your local drive, under the data directory:
-```{r}
-download_worldpop()
-download_bioko_grids()
-download_hrsl_points()
+```{r download}
+download_worldpop(local_directory = data_dir)
+download_bioko_grids(local_directory = data_dir)
+download_hrsl_points(local_directory = data_dir)
 ```
 
 The Bioko grids define cells where BIMEP assigns residents of
@@ -33,26 +43,29 @@ If we read those grids, we can see that the input files
 are projected into UTM 32N, which makes all distances in meters.
 That's very convenient, but the original grids were defined as
 a regular grid in latitude and longitude.
-```{r}
-grids <- read_bioko_grids()
+```{r grids, dependson = c("data_dir", "download")}
+grids <- read_bioko_grids(local_directory = data_dir)
 grid_info <- parameters_of_km_grid(grids$coarse, unproject = TRUE)
 ```
 If we want to make such a grid, we could use
-```{r}
+```{r grid_copy, dpeendson = c("download")}
 dimensions <- c(grid_info$x_count, grid_info$y_count)
 coarse_grid_copy <- make_fresh_grid(grid_info$bbox, dimensions)
 ```
-We can show the original and copy in unprojected space.
-```{r}
+We can show the original and copy in unprojected space
+in order to see that they overlap.
+```{r compare_1km_grids, fig.cap = "The original and our copy overlap.", dependson = "grid_copy"}
 grid_1km <- sf::st_transform(grids$coarse, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
-tm_shape(coarse_grid_copy) + tm_polygons(alpha = 0.1, border.col = "red") + tm_shape(grid_1km) + tm_polygons(alpha = 0.0, border.col = "blue")
+tm_shape(coarse_grid_copy) +
+  tm_polygons(alpha = 0.1, border.col = "red") +
+  tm_shape(grid_1km) +
+  tm_polygons(alpha = 0.0, border.col = "blue")
 ```
 
 
 
-```{r}
-library(tmap)
-hrsl_raster <- read_hrsl()
+```{r hrsl_plot, eval = FALSE}
+hrsl_raster <- read_hrsl(local_directory = data_dir)
 hrsl_points_sf <- hrsl_points(hrsl_raster)
 hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
 grids$coarse["hrsl"] <- hrsl_points_sf[[1]]
@@ -61,3 +74,13 @@ tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) +
   tm_layout(legend.title.size = 1, legend.text.size = 1)
 ```
 
+# Look at the Incoming Data
+
+There are over 330,000 people on Bioko island.
+```{r count_mis}
+load(fs::path(data_dir, "source", "pfpr_pops.RData"))
+mis_vars <- ls()[(function(x) startsWith(x, "mis"))(ls())]
+mis_total_rows <- sum(sapply(mis_vars, function(v) nrow(get(v))))
+```
+There are `r mis_total_rows` rows in the input MIS datasets.
+These seem to be individual people, so that isn't all of the data.

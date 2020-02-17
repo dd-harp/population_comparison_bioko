@@ -17,6 +17,7 @@ Imports:
     dplyr,
     plotrix,
     raster,
+    rprojroot,
     sp,
     sf,
     viridis
