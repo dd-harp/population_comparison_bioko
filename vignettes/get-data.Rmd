@@ -23,15 +23,31 @@ library(tmap)
 library(GISTools)
 ```
 
-This shows how to get the incoming data and takes a look at it.
+# Overview
+This notebook retrieves input data and converts it into
+gridded data about population density.
+
+# Get Datasets
+Specify a directory into which to put the data.
+The `inst/extdata` subdirectory is a popular place.
 ```{r data_dir}
 data_dir <- fs::path(rprojroot::find_root(rprojroot::is_rstudio_project), "inst", "extdata")
+if (!dir.exists(data_dir)) {
+  dir.create(data_dir, recursive = TRUE)
+}
 ```
-The data will come from `$r data_dir$`.
+The data will be stored in `$r data_dir$`.
+
+```{r predefinitions}
+lat_long_proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+```
+
 
 If you have an account at IHME, the following will copy files to
-your local drive, under the data directory:
-```{r download}
+your local drive, under the data directory. Look at the
+help for `data_configuration` to see about creating a config file
+for the download.
+```{r download, results = "hide"}
 download_worldpop(local_directory = data_dir)
 download_bioko_grids(local_directory = data_dir)
 download_hrsl_points(local_directory = data_dir)
@@ -47,15 +63,28 @@ a regular grid in latitude and longitude.
 grids <- read_bioko_grids(local_directory = data_dir)
 grid_info <- parameters_of_km_grid(grids$coarse, unproject = TRUE)
 ```
+You can see from the description above that the coarse
+and fine grids are shapefiles. Are these grids complete, or are they partial?
+```{r complete_grids}
+area_per_pixel <- function(grid) {
+  bbox <- st_bbox(grid)
+  (bbox["xmax"] - bbox["xmin"]) * (bbox["ymax"] - bbox["ymin"])
+}
+cat("area per pixel coarse", area_per_pixel(grids$coarse) / 3894, "\n")
+cat("area per pixel fine", area_per_pixel(grids$fine) / 197086, "\n")
+```
+We see that the area per pixel for the coarse is about $10^6\:\mbox{m}^2$, which
+means it's probably a complete grid. The fine grid looks far from complete
+because we expect $10^4\:\mbox{m}^2$ per pixel.
+
 If we want to make such a grid, we could use
 ```{r grid_copy, dpeendson = c("download")}
-dimensions <- c(grid_info$x_count, grid_info$y_count)
-coarse_grid_copy <- make_fresh_grid(grid_info$bbox, dimensions)
+coarse_grid_copy <- make_fresh_grid(grid_info$bbox, grid_info$dimensions)
 ```
 We can show the original and copy in unprojected space
 in order to see that they overlap.
 ```{r compare_1km_grids, fig.cap = "The original and our copy overlap.", dependson = "grid_copy"}
-grid_1km <- sf::st_transform(grids$coarse, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+grid_1km <- sf::st_transform(grids$coarse, crs = lat_long_proj)
 tm_shape(coarse_grid_copy) +
   tm_polygons(alpha = 0.1, border.col = "red") +
   tm_shape(grid_1km) +
@@ -63,11 +92,62 @@ tm_shape(coarse_grid_copy) +
 ```
 
 
+What if we directly make a raster version of the 1km grid?
+```{r make_raster}
+km_raster <- raster::raster(
+  ncol = grid_info$dimensions[1],
+  nrow = grid_info$dimensions[2],
+  xmn = grid_info$bbox["xmin"],
+  xmx = grid_info$bbox["xmax"],
+  ymn = grid_info$bbox["ymin"],
+  ymx = grid_info$bbox["ymax"]
+  )
+raster::projection(km_raster) <- lat_long_proj
+```
 
-```{r hrsl_plot, eval = FALSE}
+Let's get some points to project to that raster.
+```{r hrsl_plot}
 hrsl_raster <- read_hrsl(local_directory = data_dir)
 hrsl_points_sf <- hrsl_points(hrsl_raster)
 hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
+```
+
+And do the projection using a builtin function of the raster package.
+```{r project_to_raster}
+km_hrsl_raster <- raster::rasterize(
+  hrsl_points_sf,
+  km_raster,
+  field = "population_gnq_2018.10.01",
+  fun = sum
+  )
+```
+
+```{r}
+plot(km_hrsl_raster)
+```
+
+Now do the same thing for the BIMEP data. It will have a "pop"
+feature for the population in the pixel.
+```{r bimep_raster}
+bimep_feature <- bimep_population_as_points(local_directory = data_dir)
+names(bimep_feature)
+```
+Rasterize that pop feature, summing it per pixel.
+```{r}
+bimep_raster <- raster::rasterize(
+  bimep_feature,
+  km_raster,
+  field = "pop",
+  fun = sum
+  )
+names(bimep_raster)
+```
+```{r}
+plot(bimep_raster)
+```
+
+
+```{r, eval = FALSE}
 grids$coarse["hrsl"] <- hrsl_points_sf[[1]]
 tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) +
   tm_polygons("hrsl", title = "HRSL", palette = "Greens", style = "log10") +
@@ -78,9 +158,11 @@ tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) +
 
 There are over 330,000 people on Bioko island.
 ```{r count_mis}
-load(fs::path(data_dir, "source", "pfpr_pops.RData"))
+if (!"mis04" %in% ls()) {
+  load(fs::path(data_dir, "source", "pfpr_pops.RData"))
+}
 mis_vars <- ls()[(function(x) startsWith(x, "mis"))(ls())]
-mis_total_rows <- sum(sapply(mis_vars, function(v) nrow(get(v))))
+total_mis_rows <- sum(sapply(mis_vars, function(v) nrow(get(v))))
 ```
 There are `r mis_total_rows` rows in the input MIS datasets.
 These seem to be individual people, so that isn't all of the data.

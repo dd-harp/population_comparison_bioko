@@ -4,12 +4,15 @@
 #' @param grid_1km The raster for a grid in projection.
 #' @param unproject Whether to reassign it to a new projection.
 #' @return a list of suggested parameters for a grid,
-#'     including `width`, `height`, `x_count`, `y_count`,
-#'     `bbox`, `interval_x`, and `interval_y`.
+#'     including `width`, `height`, `dimensions`,
+#'     `bbox`, and `interval`, which is the size of each square.
 #' @export
 parameters_of_km_grid <- function(grid_1km, unproject = FALSE) {
   if (unproject) {
-    grid_1km <- sf::st_transform(grid_1km, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+    grid_1km <- sf::st_transform(
+      grid_1km,
+      crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+      )
   } # else leave it in projection
   coarse_bbox <- sf::st_bbox(grid_1km)
   width <- unname(coarse_bbox["xmax"] - coarse_bbox["xmin"])
@@ -20,8 +23,10 @@ parameters_of_km_grid <- function(grid_1km, unproject = FALSE) {
   x_count <- round(approximate_count)
   y_count <- round(aspect * approximate_count)
   list(
-    width = width, height = height, x_count = x_count, y_count = y_count,
-    bbox = coarse_bbox, interval_x = width / x_count, interval_y = height / y_count
+    width = width, height = height,
+    dimensions = c(x_count, y_count),
+    bbox = coarse_bbox,
+    interval = c(width / x_count, height / y_count)
   )
 }
 
@@ -41,17 +46,24 @@ make_fresh_grid <- function(bounding_box, dimensions) {
     bounding_box["ymax"] - bounding_box["ymin"]
   ) / dimensions
   offset <- c(bounding_box["xmin"], bounding_box["ymin"]) + 0.5 * cell_size
-  gridded <- sp::GridTopology(cellcentre.offset = offset, cellsize = cell_size, cells.dim = dimensions)
+  gridded <- sp::GridTopology(
+    cellcentre.offset = offset,
+    cellsize = cell_size,
+    cells.dim = dimensions
+    )
   int.layer <- sp::SpatialPolygonsDataFrame(
     as.SpatialPolygons.GridTopology(gridded),
     data = data.frame(c(1:prod(dimensions))), match.ID = FALSE
   )
   names(int.layer) <- "ID"
-  sp::proj4string(int.layer) <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+  sp::proj4string(int.layer) <-
+    "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   int_layer_sf <- sf::st_as_sf(int.layer)
   int_layer_bbox <- sf::st_bbox(int.layer)
   if (max(abs(int_layer_bbox - bounding_box)) > 0.25 * min(cell_size)) {
-    cat(paste("Bounding boxes don't match", int_layer_bbox, bounding_box, sep = " "))
+    cat(paste(
+      "Bounding boxes don't match", int_layer_bbox, bounding_box, sep = " "
+      ))
   }
   if (length(int_layer_sf$geometry) != prod(dimensions)) {
     stop("Geometry generated has wrong number of grid cells")
@@ -60,23 +72,39 @@ make_fresh_grid <- function(bounding_box, dimensions) {
 }
 
 
+#' Associate BIMEP index with its map ID.
+#'
+#' @param grid_100m The grid with `mapaID` defined.
+#' @return A vector of indexes and associated names.
+#' @export
+bimep_named_vector <- function(grid_100m) {
+  fine_df <- data.frame(grid_100m)
+  lookup <- 1:nrow(fine_df)
+  names(lookup) <- fine_df$mapaID
+  lookup
+}
+
+
 #' Turns each population entry into a lat-long coordinate.
+#'
+#' This reads the `popm.csv` of population at 100m grid points.
+#' It produces a vector file with population as a feature.
 #'
 #' @param grid_100m A 100m grid.
 #' @param local_directory Where external data is stored.
 #' @return An sf points file with population as features.
 #' @export
-register_bimep_population <- function(grid_100m, local_directory = "inst/extdata") {
-  fine_df <- data.frame(grid_100m)
-  lookup <- 1:nrow(fine_df)
-  names(lookup) <- fine_df$mapaID
+bimep_population_as_points <- function(local_directory = "inst/extdata") {
   popm_csv <- fs::path(local_directory, "source", "popm.csv")
-  pops <- read.table(popm_csv, stringsAsFactors = FALSE, header = TRUE, sep = ",")
+  pops <- read.table(
+    popm_csv,
+    stringsAsFactors = FALSE, header = TRUE, sep = ",")
   projected_cell_center <- lapply(1:nrow(pops), function(idx) {
     sf::st_point(c(pops[idx, "xcoord"], pops[idx, "ycoord"]))
   })
   features <- sf::st_sf(
     st_as_sfc(projected_cell_center),
+    pop = pops$pop100,
     crs = "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
     )
   features_latlong <- sf::st_transform(
