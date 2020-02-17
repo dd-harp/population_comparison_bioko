@@ -147,6 +147,14 @@ names(bimep_raster)
 plot(bimep_raster)
 ```
 
+Write these as layers to a GeoTIFF.
+```{r write_hrsl_bimep}
+names(km_hrsl_raster) <- c("HRSL")
+names(bimep_raster) <- c("BIMEP")
+both_layers <- raster::addLayer(km_hrsl_raster, bimep_raster)
+raster::writeRaster(both_layers, filename = fs::path(data_dir, "hrsl_bimep"), format = "GTiff")
+```
+
 
 ```{r, eval = FALSE}
 grids$coarse["hrsl"] <- hrsl_points_sf[[1]]
@@ -176,10 +184,17 @@ bimep_landscan_raster <- raster::rasterize(
   )
 names(bimep_landscan_raster)
 ```
+
 ```{r}
 plot(bimep_landscan_raster)
 ```
 
+```{r write_landscan_bimep}
+names(bimep_landscan_raster) <- c("HRSL")
+names(landscan) <- c("LandScan")
+bls_layers <- raster::addLayer(landscan, bimep_landscan_raster)
+raster::writeRaster(bls_layers, filename = fs::path(data_dir, "landscan_bimep"), format = "GTiff")
+```
 
 # BIMEP Data on WorldPop Raster
 
