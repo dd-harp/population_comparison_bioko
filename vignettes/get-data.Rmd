@@ -181,6 +181,36 @@ plot(bimep_landscan_raster)
 ```
 
 
+# BIMEP Data on WorldPop Raster
+
+The WorldPop pixel size is 100m, so it's (0.0008333,-0.0008333)
+in lat-long.
+
+```{r worlpop_raster}
+worldpop <- raster::raster(fs::path(data_dir, "Equatorial_Guinea_100m_Population", "GNQ15v2.tif"))
+worldpop <- raster::crop(worldpop, bimep_feature, snap = "out")
+plot(worldpop)
+```
+Let's turn the worldpop into a 1km grid using aggregation.
+```{r aggregate_worldpop}
+worldpop_1km <- raster::aggregate(worldpop, fact = 10, fun = sum, expand = TRUE)
+plot(worldpop_1km)
+```
+Now put the BIMEP on this raster.
+```{r bimep_on_worldpop}
+bimep_landscan_raster <- raster::rasterize(
+  bimep_feature,
+  worldpop_1km,
+  field = "pop",
+  fun = sum
+  )
+names(bimep_landscan_raster)
+```
+
+```{r}
+plot(bimep_landscan_raster)
+```
+
 
 
 # Look at the Incoming Data
