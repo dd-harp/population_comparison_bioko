@@ -85,7 +85,7 @@ sectors$pd1km <- sectors$xcoord * 0
 
 The density calculation uses distance, $r = \sqrt{(x-x_0)^2 + (y-y_0)^2}$
 in the current coordinate system of popm.csv. This csv is in a UTM projection,
-so it"s in meters.
+so it's in meters.
 It looks for pixels
 within $r = 1000/\sqrt{\pi}$ so $\pi r^2 < 1000^2$. That"s the count
 within a $1\:\mbox{km}^2$ disc.

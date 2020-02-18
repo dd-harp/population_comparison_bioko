@@ -13,3 +13,18 @@ params:
 
 This notebook calculates metrics from a population density map
 by comparing them with a gold standard map. The maps are
+
+```{r}
+pareto_pops <- function(n) {
+  quantiles <- seq(0, 1, 1 / n)[1:n]
+  sort(VGAM::qpareto(quantiles, scale = 1, shape = log(5, 4)))
+}
+
+pops <- pareto_pops(10^2)
+pops <- sort(VGAM::rpareto(10^6, scale = 1, shape = log(5, 4)))
+cumulant <- cumsum(pops) / sum(pops)
+inverse <- c(length(pops):1) / length(pops)
+plot(cumulant, type = "l", col = "green")
+lines(inverse, col = "blue")
+```
+
