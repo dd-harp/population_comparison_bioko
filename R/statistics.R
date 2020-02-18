@@ -19,7 +19,7 @@ pareto_fraction <- function(density) {
 
 #' Estimate bandwidth for a density function kernel with Bowman and Azzalini.
 #'
-#' This is $\sigma_x\left(\frac{2}{3n}\frac)^{1/6}$.
+#' This is \eqn{\sigma_x\left(\frac{2}{3n}\frac)^{1/6}}.
 #'
 #' @param val A list of coordinates in one dimension.
 #' @return A single numeric for the bandwidth.
@@ -65,10 +65,10 @@ urban_fraction <- function(population_array, urban_cutoff = 1000) {
 summary_statistics <- function(population) {
   population_array <- as.array(population)
   list(
-    maximum = max(population_array),
-    total = sum(population_array),
-    empty_fraction = length(population_array == 0) / length(population_array),
-    pareto_fraction = pareto_fraction(as.array(population_array)),
+    maximum = max(population_array, na.rm = TRUE),
+    total = sum(population_array, na.rm = TRUE),
+    empty_fraction = sum(population_array < 1, na.rm = TRUE) / sum(!is.na(population_array)),
+    pareto_fraction = pareto_fraction(population_array),
     urban_fraction = urban_fraction(population_array),
     na_fraction = sum(is.na(population_array)) / length(population_array)
   )

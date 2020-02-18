@@ -70,6 +70,7 @@ The data will be stored in `$r data_dir$`.
 
 ```{r predefinitions}
 lat_long_proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+bioko_sf <- sf::st_read(fs::path(data_dir, "source", "bioko.shp"))
 ```
 
 
@@ -163,7 +164,7 @@ km_hrsl_raster <- raster::rasterize(
   hrsl_points_sf,
   km_raster,
   field = "population_gnq_2018.10.01",
-  fun = sum
+  fun = function(x) sum(x, na.rm = TRUE)
   )
 ```
 

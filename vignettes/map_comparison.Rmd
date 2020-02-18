@@ -14,6 +14,10 @@ by comparing them with a gold standard map.
 
 # Maps
 
+The maps were made by the "get-data" vignette. We load them all
+at once here for convenience. The naming scheme is dataset-on-grid,
+where grids are 100m or 1km, according to where they come from.
+
 ```{r load_maps}
 project_root <- rprojroot::find_root(rprojroot::is_rstudio_project)
 map_root <- fs::path(project_root, "inst", "extdata")
@@ -34,4 +38,14 @@ maps <- lapply(paths, function(one_path) raster::raster(one_path))
 names(maps) <- files
 ```
 
+# Summary Statistics
+
+The first figure is summary statistics, done at the pixel level.
+
+```{r summary_statistics}
+summary_stats <- lapply(maps, summary_statistics)
+summary_df <- do.call(rbind, summary_stats)
+rownames(summary_df) <- names(maps)
+t(summary_df)
+```
 
