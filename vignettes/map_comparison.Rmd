@@ -5,26 +5,33 @@ date: "9/18/2019"
 output:
   pdf_document: default
   html_document: default
-params:
-  source_data: /home/adolgert/dev/popbioko/inst/extdata/source
 ---
 
 # Overview
 
 This notebook calculates metrics from a population density map
-by comparing them with a gold standard map. The maps are
+by comparing them with a gold standard map.
 
-```{r}
-pareto_pops <- function(n) {
-  quantiles <- seq(0, 1, 1 / n)[1:n]
-  sort(VGAM::qpareto(quantiles, scale = 1, shape = log(5, 4)))
+# Maps
+
+```{r load_maps}
+project_root <- rprojroot::find_root(rprojroot::is_rstudio_project)
+map_root <- fs::path(project_root, "inst", "extdata")
+
+load_one <- function(name) {
+  raster::raster(fs::path(map_root, name, ext = "tif"))
 }
-
-pops <- pareto_pops(10^2)
-pops <- sort(VGAM::rpareto(10^6, scale = 1, shape = log(5, 4)))
-cumulant <- cumsum(pops) / sum(pops)
-inverse <- c(length(pops):1) / length(pops)
-plot(cumulant, type = "l", col = "green")
-lines(inverse, col = "blue")
+files <- c(
+  "bimep_on_1kworldpop", "bimep_on_area", "bimep_on_landscan",
+  "hrsl_on_area", "hrsl_on_hrsl", "landscan_on_landscan",
+  "worldpop_on_1kworldpop", "worldpop_on_worldpop"
+  )
+paths <- sapply(files, function(base) fs::path(map_root, base, ext = "tif"))
+for (check_exist in paths) {
+  stopifnot(file.exists(check_exist))
+}
+maps <- lapply(paths, function(one_path) raster::raster(one_path))
+names(maps) <- files
 ```
+
 

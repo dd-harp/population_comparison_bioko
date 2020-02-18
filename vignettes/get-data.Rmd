@@ -30,20 +30,15 @@ and clean data so that we can pass that to another notebook to do statistics.
 The gold standard dataset is BIMEP, so we will re-grid the BIMEP data
 onto the same grids as the other datasets.
 
-The output is all GeoTIFFs.
+The output is all GeoTIFFs with names of the form data-on-grid.
+The data are BIMEP, WorldPop, HRSL, and LandScan. The grids
+are
 
-- `hrsl_bimep.tif`, with HRSL and BIMEP on the 1 km grid that BIMEP
-  defined.
-- `landscan_bimep.tif`, with the BIMEP data on LandScan's 1 km grid.
-- `landscan_crop.tif`, with the LandScan data, cropped to Bioko's
-  bounds. This is in a separate GeoTIFF because the data types are integer and float.
-- `worldpop_bimep.tif`, with two layers, one for WorldPop and one for
-  BIMEP on the WorldPop grid, cropped to the Bioko boundary.
-  This is on a 1 km grid.
-- `hrsl_crop.tif`, which is HRSL cropped to the Bioko boundary,
-  This is on a 100 m grid.
-- `worldpop_crop.tif`, which is WorldPop cropped to the Bioko boundary,
-  on a 100 m grid.
+- area, a 1km grid used by BIMEP.
+- worldpop, a 100m grid used by WorldPop
+- 1kworldpop, a 1km grid that aggregates and aligns with the WorldPop grid.
+- landscan, the 1km LandScan grid
+- hrsl, the 100m HRSL grid.
 
 We have to take care with borders. All datasets are counts
 of people in a pixel. On borders with the water, these counts
@@ -190,24 +185,25 @@ names(bimep_raster)
 plot(bimep_raster)
 ```
 
+We will write all raster layers the same way.
+```{r}
+write_one <- function(layer, basename) {
+  raster::writeRaster(
+    layer,
+    filename = fs::path(data_dir, basename),
+    format = "GTiff",
+    overwrite = TRUE
+    )
+}
+```
+
 Write these as layers to a GeoTIFF.
 ```{r write_hrsl_bimep}
 names(km_hrsl_raster) <- c("HRSL")
 names(bimep_raster) <- c("BIMEP")
-both_layers <- raster::addLayer(km_hrsl_raster, bimep_raster)
-raster::writeRaster(
-  both_layers,
-  filename = fs::path(data_dir, "hrsl_bimep"),
-  format = "GTiff",
-  overwrite = TRUE
-  )
-names(hrsl_raster_crop) <- "HRSL"
-raster::writeRaster(
-  hrsl_raster_crop,
-  filename = fs::path(data_dir, "hrsl_crop"),
-  format = "GTiff",
-  overwrite = TRUE
-  )
+write_one(km_hrsl_raster, "hrsl_on_area")
+write_one(bimep_raster, "bimep_on_area")
+write_one(hrsl_raster_crop, "hrsl_on_hrsl")
 ```
 
 
@@ -247,19 +243,8 @@ plot(bimep_landscan_raster)
 ```{r write_landscan_bimep}
 names(bimep_landscan_raster) <- c("HRSL")
 names(landscan) <- c("LandScan")
-bls_layers <- raster::addLayer(landscan, bimep_landscan_raster)
-raster::writeRaster(
-  bimep_landscan_raster,
-  filename = fs::path(data_dir, "landscan_bimep"),
-  format = "GTiff",
-  overwrite = TRUE
-  )
-raster::writeRaster(
-  landscan,
-  filename = fs::path(data_dir, "landscan_crop"),
-  format = "GTiff",
-  overwrite = TRUE
-  )
+write_one(landscan, "landscan_on_landscan")
+write_one(bimep_landscan_raster, "bimep_on_landscan")
 ```
 
 # BIMEP Data on WorldPop Raster
@@ -296,20 +281,9 @@ plot(bimep_worldpop_raster)
 names(worldpop_1km) <- "WorldPop"
 names(bimep_worldpop_raster) <- "BIMEP"
 wp_layers <- raster::addLayer(worldpop_1km, bimep_worldpop_raster)
-raster::writeRaster(
-  wp_layers,
-  filename = fs::path(data_dir, "worldpop_bimep"),
-  format = "GTiff",
-  overwrite = TRUE
-  )
-# Save the 100m WorldPop, cropped to Bioko.
-names(worldpop) <- "WorldPop"
-raster::writeRaster(
-  worldpop,
-  filename = fs::path(data_dir, "worldpop_crop"),
-  format = "GTiff",
-  overwrite = TRUE
-  )
+write_one(worldpop_1km, "worldpop_on_1kworldpop")
+write_one(bimep_worldpop_raster, "bimep_on_1kworldpop")
+write_one(worldpop, "worldpop_on_worldpop")
 ```
 
 
