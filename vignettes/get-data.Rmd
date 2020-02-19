@@ -56,6 +56,14 @@ transform the BIMEP projection to lat-long, but the rest
 are already in lat-long, and the BIMEP coarse and fine grids
 are rectilinear in lat-long.
 
+We will ensure each dataset has NA values where it's ocean
+and 0 values inland of the ocean.
+
+We could also rescale populations according to the growth rate
+for Bioko. A commonly-used adjustment is to
+multiply values by $exp(rt)$, where $r$ is the yearly growth rate.
+This wouldn't affect the structure of zeroes, though.
+
 
 # Get Datasets
 Specify a directory into which to put the data.

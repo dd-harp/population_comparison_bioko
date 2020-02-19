@@ -2,7 +2,8 @@
 #' remake it.
 #'
 #' @param grid_1km The raster for a grid in projection.
-#' @param unproject Whether to reassign it to a new projection.
+#' @param unproject Whether to reassign it to lat-long
+#'     instead of a projected coordinate system.
 #' @return a list of suggested parameters for a grid,
 #'     including `width`, `height`, `dimensions`,
 #'     `bbox`, and `interval`, which is the size of each square.
@@ -90,7 +91,6 @@ bimep_named_vector <- function(grid_100m) {
 #' This reads the `popm.csv` of population at 100m grid points.
 #' It produces a vector file with population as a feature.
 #'
-#' @param grid_100m A 100m grid.
 #' @param local_directory Where external data is stored.
 #' @return An sf points file with population as features.
 #' @export
@@ -112,6 +112,52 @@ bimep_population_as_points <- function(local_directory = "inst/extdata") {
     crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
     )
   features_latlong
+}
+
+
+row_first <- function(x, row_width, column_width) {
+  c(x %% row_width, x - row_width * (x %% row_width))
+}
+
+column_first <- function(x, row_width, column_width) {
+  c(x - column_width * (x %% column_width), x %% column_width)
+}
+
+#' Read BIMEP population as a raster.
+#'
+#' This method shows that we really don't have the same raster as
+#' the original BIMEP cells. This grid and the BIMEP grid aren't aligned.
+#'
+#' We don't have the original raster, unfortunately, so we try
+#' to rebuild it here. The data is organized into sections and then
+#' areas within the section.
+#' @export
+bimep_population_as_raster <- function(grid_info, lat_long_proj, point_population) {
+  raster100 <- raster::raster(
+    xmn = grid_info$bbox["xmin"],
+    xmx = grid_info$bbox["xmax"],
+    ymn = grid_info$bbox["ymin"],
+    ymx = grid_info$bbox["ymax"],
+    nrows = grid_info$dimensions[1] * 10,
+    ncols = grid_info$dimensions[2] * 10,
+    crs = lat_long_proj
+    )
+  with_points <- raster::rasterize(point_population, raster100, field = "pop", fun = "count")
+  with_points
+}
+
+
+
+add_area_section <- function(pops) {
+  axis <- function(row_col) {
+    function(name) {
+      # Names are of the form "M0090S090".
+      sapply(strsplit(name, "[MS]")[[1]][1 + row_col], function(x) strtoi(x, base = 10))
+    }
+  }
+  pops["area"] <- sapply(pops[["secId"]], axis(1))
+  pops["sec"] <- sapply(pops[["secId"]], axis(2))
+  pops
 }
 
 
