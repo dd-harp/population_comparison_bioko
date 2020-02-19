@@ -149,12 +149,19 @@ raster::projection(km_raster) <- lat_long_proj
 ```
 
 Let's get some points to project to that raster.
+The HRSL gives the location of a roof, or NA values. It doesn't say where
+there could be population but isn't. Other population maps assign
+a population of 0 to all non-ocean areas, including lakes. LandScan says
+it extends the land area by a bit, too. We will use a shapefile for
+Bioko in order to assign zero values to the HRSL.
 ```{r hrsl_plot}
 hrsl_raster <- read_hrsl(local_directory = data_dir)
 hrsl_raster_crop <- raster::crop(hrsl_raster, bimep_feature, snap = "out")
+hrsl_zero_mask <- raster::rasterize(bioko_sf, hrsl_raster_crop, field = 0)
+hrsl_raster_zero <- raster::cover(hrsl_raster_crop, hrsl_zero_mask)
 hrsl_points_sf <- hrsl_points(hrsl_raster_crop)
 # hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
-plot(hrsl_raster_crop)
+plot(hrsl_raster_zero)
 ```
 
 
@@ -164,8 +171,10 @@ km_hrsl_raster <- raster::rasterize(
   hrsl_points_sf,
   km_raster,
   field = "population_gnq_2018.10.01",
-  fun = function(x) sum(x, na.rm = TRUE)
+  fun = sum
   )
+area_zero_raster <- raster::rasterize(bioko_sf, km_hrsl_raster, field = 0)
+km_hrsl_raster <- raster::cover(km_hrsl_raster, area_zero_raster)
 ```
 
 ```{r}
@@ -204,7 +213,7 @@ names(km_hrsl_raster) <- c("HRSL")
 names(bimep_raster) <- c("BIMEP")
 write_one(km_hrsl_raster, "hrsl_on_area")
 write_one(bimep_raster, "bimep_on_area")
-write_one(hrsl_raster_crop, "hrsl_on_hrsl")
+write_one(hrsl_raster_zero, "hrsl_on_hrsl")
 ```
 
 

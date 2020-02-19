@@ -63,7 +63,7 @@ urban_fraction <- function(population_array, urban_cutoff = 1000) {
 #'     `urban_fraction`, `na_fraction`.
 #' @export
 summary_statistics <- function(population) {
-  population_array <- as.array(population)
+  population_array <- raster::as.array(population)
   list(
     maximum = max(population_array, na.rm = TRUE),
     total = sum(population_array, na.rm = TRUE),
