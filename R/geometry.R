@@ -102,16 +102,45 @@ bimep_population_as_points <- function(local_directory = "inst/extdata") {
   projected_cell_center <- lapply(1:nrow(pops), function(idx) {
     sf::st_point(c(pops[idx, "xcoord"], pops[idx, "ycoord"]))
   })
+  utm_projected_crs <- "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
   features <- sf::st_sf(
     st_as_sfc(projected_cell_center),
     pop = pops$pop100,
-    crs = "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
+    crs = utm_projected_crs
     )
   features_latlong <- sf::st_transform(
     features,
     crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
     )
   features_latlong
+}
+
+
+#' Aligns long-lat per-house data to a given raster grid.
+#'
+#' @param grid A raster::raster to which to align
+#' @param bioko_sf A shapefile that defines where population is zero.
+#' @param local_directory Location of the directory where the file is found.
+#' @return A raster::raster with the new data on longlat, na in ocean,
+#'   zero or a pop value on land.
+#' @export
+bimep_on_grid <- function(grid, bioko_sf, local_directory = "inst/extdata") {
+  popm_csv <- fs::path(local_directory, "source", "hh_pop_bioko.csv")
+  pops <- read.table(
+    popm_csv,
+    stringsAsFactors = FALSE, header = TRUE, sep = ",")
+  projected_cell_center <- lapply(1:nrow(pops), function(idx) {
+    sf::st_point(c(pops[idx, "xcoord"], pops[idx, "ycoord"]))
+  })
+  features <- sf::st_sf(
+    st_as_sfc(projected_cell_center),
+    pop = pops$pop100,
+    crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+  )
+  house_and_na <- raster::rasterize(features, grid, fun = sum)
+  hrsl_zero_mask <- raster::rasterize(bioko_sf, grid, field = 0)
+  house_and_zero <- raster::cover(house_and_na, hrsl_zero_mask)
+  house_and_zero
 }
 
 

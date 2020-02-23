@@ -91,7 +91,32 @@ download_worldpop(local_directory = data_dir)
 download_bioko_grids(local_directory = data_dir)
 download_hrsl_points(local_directory = data_dir)
 ```
-# Load BIMEP Early
+# Align to Grids from BIMEP GPS Data
+This section uses the original BIMEP GPS data,
+so it's a longitude-latitude for each house an an integer
+count of the number of people.
+That means there is no section or area grid to consider.
+We align BIMEP to any location.
+
+## HRSL
+The HRSL marks where houses are with values and everywhere else with NA.
+We need to have zeroes where there is land, so add the zeroes
+to the HRSL.
+```{r hrsl_original}
+# Original raster is all of Equatorial Guinea, so crop it.
+hrsl_raster <- read_hrsl(local_directory = data_dir)
+hrsl_raster_crop <- raster::crop(hrsl_raster, bioko_sf, snap = "out")
+hrsl_zero_mask <- raster::rasterize(bioko_sf, hrsl_raster_crop, field = 0)
+hrsl_raster_zero <- raster::cover(hrsl_raster_crop, hrsl_zero_mask)
+plot(hrsl_raster_zero)
+```
+
+
+# Align to Grids from a BIMEP 100m Grid
+This section uses BIMEP data at a 100m grid level.
+This is a raster dataset.
+
+## Load BIMEP Early
 
 The BIMEP data will have a "pop" feature for the population in the pixel.
 Load it now so that we have its bounding box.
@@ -103,7 +128,7 @@ names(bimep_feature)
 We see the population as `pop` and the other column, which is the geometry
 for each point.
 
-# Align HRSL and BIMEP to BIMEP 1k Grid
+## Align HRSL and BIMEP to BIMEP 1k Grid
 The Bioko grids define cells where BIMEP assigns residents of
 the island. One is a 1 km grid, the other a 100 m grid.
 If we read those grids, we can see that the input files
@@ -232,7 +257,7 @@ tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) +
   tm_layout(legend.title.size = 1, legend.text.size = 1)
 ```
 
-# Align BIMEP to LandScan Grid
+## Align BIMEP to LandScan Grid
 
 The LandScan grid is an Arc/Info Binary Grid, so it's the adf type.
 It uses pixel sizes of 0.008333 in both dimensions.
@@ -265,7 +290,7 @@ write_one(landscan, "landscan_on_landscan")
 write_one(bimep_landscan_raster, "bimep_on_landscan")
 ```
 
-# BIMEP Data on WorldPop Raster
+## BIMEP Data on WorldPop Raster
 
 The WorldPop pixel size is 100m, so it's (0.0008333,-0.0008333)
 in lat-long.
@@ -304,17 +329,3 @@ write_one(bimep_worldpop_raster, "bimep_on_1kworldpop")
 write_one(worldpop, "worldpop_on_worldpop")
 ```
 
-
-
-# Look at the Incoming Data
-
-There are over 330,000 people on Bioko island.
-```{r count_mis}
-if (!"mis04" %in% ls()) {
-  load(fs::path(data_dir, "source", "pfpr_pops.RData"))
-}
-mis_vars <- ls()[(function(x) startsWith(x, "mis"))(ls())]
-total_mis_rows <- sum(sapply(mis_vars, function(v) nrow(get(v))))
-```
-There are `r mis_total_rows` rows in the input MIS datasets.
-These seem to be individual people, so that isn't all of the data.
