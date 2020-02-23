@@ -20,22 +20,20 @@ where grids are 100m or 1km, according to where they come from.
 
 ```{r load_maps}
 project_root <- rprojroot::find_root(rprojroot::is_rstudio_project)
-map_root <- fs::path(project_root, "inst", "extdata")
+map_root <- fs::path(project_root, "inst", "extdata", "aligned")
+files <- list.files(map_root, pattern = "*.tif$")
 
-load_one <- function(name) {
-  raster::raster(fs::path(map_root, name, ext = "tif"))
+file_identifier <- function(name) {
+  splitted <- strsplit(name, "[_.]")[[1]]
+  identifier <- list(grid = splitted[[1]], source = splitted[[2]])
+  identifier$resolution <- ifelse(endsWith(identifier$grid, "100"), 100, 1000)
+  identifier
 }
-files <- c(
-  "bimep_on_1kworldpop", "bimep_on_area", "bimep_on_landscan",
-  "hrsl_on_area", "hrsl_on_hrsl", "landscan_on_landscan",
-  "worldpop_on_1kworldpop", "worldpop_on_worldpop"
-  )
-paths <- sapply(files, function(base) fs::path(map_root, base, ext = "tif"))
-for (check_exist in paths) {
-  stopifnot(file.exists(check_exist))
-}
-maps <- lapply(paths, function(one_path) raster::raster(one_path))
-names(maps) <- files
+map_ids <- lapply(files, file_identifier)
+descriptive_name <- sapply(map_ids, function(x) paste(x$source, "on", x$grid))
+names(map_ids) <- descriptive_name
+maps <- lapply(files, function(x) raster::raster(fs::path(map_root, x)))
+names(maps) <- descriptive_name
 ```
 
 # Summary Statistics
