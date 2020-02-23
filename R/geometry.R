@@ -129,17 +129,20 @@ bimep_on_grid <- function(grid, bioko_sf, local_directory = "inst/extdata") {
   pops <- read.table(
     popm_csv,
     stringsAsFactors = FALSE, header = TRUE, sep = ",")
+  without_index <- pops[, !names(pops) %in% c("index")]
+  names(without_index) <- c("lon", "lat", "pop")
   projected_cell_center <- lapply(1:nrow(pops), function(idx) {
-    sf::st_point(c(pops[idx, "xcoord"], pops[idx, "ycoord"]))
+    sf::st_point(c(pops[idx, "lon"], pops[idx, "lat"]))
   })
   features <- sf::st_sf(
     st_as_sfc(projected_cell_center),
-    pop = pops$pop100,
+    pop = without_index$pop,
     crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   )
-  house_and_na <- raster::rasterize(features, grid, fun = sum)
+  house_and_na <- raster::rasterize(features, grid, fun = sum, field = "pop")
   hrsl_zero_mask <- raster::rasterize(bioko_sf, grid, field = 0)
   house_and_zero <- raster::cover(house_and_na, hrsl_zero_mask)
+  names(house_and_zero) <- c("BIMEP")
   house_and_zero
 }
 

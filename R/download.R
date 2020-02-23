@@ -171,3 +171,43 @@ read_hrsl <- function(local_directory = "inst/extdata") {
 read_landscan <- function(local_directory = "inst/extdata") {
   raster::raster(fs::path(local_directory, "LandScan Global 2018", "lspop2018"))
 }
+
+
+#' Write a raster layer to a file.
+#'
+#' Our intermediate datasets go into a directory with a given format.
+#' We write these files into an `aligned` subdirectory of the local directory.
+#' The name is (grid, resolution, source), in that order. That way
+#' they are near each other when you `dir()`.
+#' This also ensures the name of the layer matches the source name.
+#'
+#' @param layer is the RasterLayer to write.
+#' @param layer_id is a list describing the layer with
+#'   (source = (HRSL, BIMEP, LandScan, WorldPop), grid = (HRSL, LandScan, Worldpop))
+#'   and resolution = (100, 1000).
+#' @param local_directory is where we put the data. This data
+#'   will be written to a subdirectory of that.
+#' @export
+write_aligned_raster <- function(layer, layer_id, local_directory = "inst/extdata") {
+  aligned <- fs::path(local_directory, "aligned")
+  if (!dir.exists(aligned)) {
+    fs::dir_create(aligned, recurse = TRUE)
+  }
+  filename <- paste(
+    layer_id$grid,
+    layer_id$resolution,
+    "_",
+    layer_id$source,
+    sep = ""
+  )
+  layer_path <- fs::path(aligned, filename, ext = "tif")
+  if (file.exists(layer_path)) {
+    unlink(layer_path)
+  }
+  names(layer) <- layer_id$source
+  raster::writeRaster(
+    layer,
+    filename = layer_path,
+    format = "GTiff"
+  )
+}

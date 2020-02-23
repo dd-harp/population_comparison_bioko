@@ -4,13 +4,14 @@ output:
   pdf_document: default
   html_document:
     df_print: paged
-cache: yes
 ---
 
 ```{r knitr_options, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  autodep = TRUE,
+  cache = TRUE
 )
 ```
 
@@ -30,15 +31,6 @@ and clean data so that we can pass that to another notebook to do statistics.
 The gold standard dataset is BIMEP, so we will re-grid the BIMEP data
 onto the same grids as the other datasets.
 
-The output is all GeoTIFFs with names of the form data-on-grid.
-The data are BIMEP, WorldPop, HRSL, and LandScan. The grids
-are
-
-- area, a 1km grid used by BIMEP.
-- worldpop, a 100m grid used by WorldPop
-- 1kworldpop, a 1km grid that aggregates and aligns with the WorldPop grid.
-- landscan, the 1km LandScan grid
-- hrsl, the 100m HRSL grid.
 
 We have to take care with borders. All datasets are counts
 of people in a pixel. On borders with the water, these counts
@@ -98,12 +90,18 @@ count of the number of people.
 That means there is no section or area grid to consider.
 We align BIMEP to any location.
 
+The output of this section is a set of GeoTIFFS in the `aligned`
+subdirectory of your data directory (likely `inst/extdata/aligned`).
+The names are of the form `<grid><resolution>_<source>.tif`.
+So the HRSL is on a 100m grid. It is saved as `HRSL100_HRSL.tif`.
+Bioko data on that grid is saved as `HRSL100_Bioko.tif`.
+
 ## HRSL
 The HRSL marks where houses are with values and everywhere else with NA.
+The incoming data is for all of Equatorial Guinea, so we crop it.
 We need to have zeroes where there is land, so add the zeroes
-to the HRSL.
+to the HRSL. Otherwise, we don't modify values.
 ```{r hrsl_original}
-# Original raster is all of Equatorial Guinea, so crop it.
 hrsl_raster <- read_hrsl(local_directory = data_dir)
 hrsl_raster_crop <- raster::crop(hrsl_raster, bioko_sf, snap = "out")
 hrsl_zero_mask <- raster::rasterize(bioko_sf, hrsl_raster_crop, field = 0)
@@ -111,10 +109,111 @@ hrsl_raster_zero <- raster::cover(hrsl_raster_crop, hrsl_zero_mask)
 plot(hrsl_raster_zero)
 ```
 
+Now put Bioko data on that grid:
+```{r bioko_on_hrsl}
+bimep_on_hrsl <- bimep_on_grid(hrsl_raster_zero, bioko_sf, local_directory = data_dir)
+plot(bimep_on_hrsl)
+```
+```{r write_100m_hrsl}
+popbioko::write_aligned_raster(
+  hrsl_raster_zero,
+  list(source = "HRSL", grid = "HRSL", resolution = 100),
+  local_directory = data_dir
+)
+popbioko::write_aligned_raster(
+  bimep_on_hrsl,
+  list(source = "BIMEP", grid = "HRSL", resolution = 100),
+  local_directory = data_dir
+)
+```
+
+
+```{r write_1000m_hrsl}
+aggregate_and_write <- function(raster, name) {
+  aggregated <- raster::aggregate(raster, face = 10, fun = sum, expand = TRUE)
+  popbioko::write_aligned_raster(
+    aggregated,
+    list(source = name$source, grid = name$grid, resolution = 10 * name$resolution),
+    local_directory = data_dir)
+}
+aggregate_and_write(
+  hrsl_raster_zero,
+  list(source = "HRSL", grid = "HRSL", resolution = 100)
+)
+aggregate_and_write(
+  bimep_on_hrsl,
+  list(source = "BIMEP", grid = "HRSL", resolution = 100)
+)
+```
+
+
+
+## LandScan
+LandScan is 1 km data, so we don't aggregate it.
+```{r landscan_to_grid}
+landscan <- read_landscan(local_directory = data_dir)
+landscan <- raster::crop(landscan, bioko_sf, snap = "out")
+bimep_on_landscan <- bimep_on_grid(landscan, bioko_sf, local_directory = data_dir)
+popbioko::write_aligned_raster(
+  landscan,
+  list(source = "LandScan", grid = "LandScan", resolution = 1000),
+  local_directory = data_dir
+)
+popbioko::write_aligned_raster(
+  bimep_on_landscan,
+  list(source = "BIMEP", grid = "LandScan", resolution = 1000),
+  local_directory = data_dir
+)
+```
+
+
+## WorldPop
+
+WorldPop is 100m, like the HRSL data, so we aggregate it.
+
+```{r worldpop_to_grid}
+worldpop <- raster::raster(fs::path(data_dir, "Equatorial_Guinea_100m_Population", "GNQ15v2.tif"))
+worldpop <- raster::crop(worldpop, bioko_sf, snap = "out")
+worldpop_id <- list(source = "WorldPop", grid = "WorldPop", resolution = 100)
+hrsl_id <- worldpop_id
+hrsl_id$source <- "HRSL"
+popbioko::write_aligned_raster(
+  worldpop,
+  worldpop_id,
+  local_directory = data_dir
+)
+bimep_on_worldpop <- bimep_on_grid(
+  worldpop, bioko_sf, local_directory = data_dir)
+popbioko::write_aligned_raster(
+  bimep_on_worldpop,
+  hrsl_id,
+  local_directory = data_dir
+)
+aggregate_and_write(
+  worldpop,
+  worldpop_id
+)
+aggregate_and_write(
+  bimep_on_worldpop,
+  hrsl_id
+)
+```
+
 
 # Align to Grids from a BIMEP 100m Grid
 This section uses BIMEP data at a 100m grid level.
 This is a raster dataset.
+
+
+The output is all GeoTIFFs with names of the form data-on-grid.
+The data are BIMEP, WorldPop, HRSL, and LandScan. The grids
+are
+
+- area, a 1km grid used by BIMEP.
+- worldpop, a 100m grid used by WorldPop
+- 1kworldpop, a 1km grid that aggregates and aligns with the WorldPop grid.
+- landscan, the 1km LandScan grid
+- hrsl, the 100m HRSL grid.
 
 ## Load BIMEP Early
 
