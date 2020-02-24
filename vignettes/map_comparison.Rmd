@@ -20,6 +20,7 @@ where grids are 100m or 1km, according to where they come from.
 
 ```{r load_maps}
 project_root <- rprojroot::find_root(rprojroot::is_rstudio_project)
+data_dir <- fs::path(project_root, "inst", "extdata")
 map_root <- fs::path(project_root, "inst", "extdata", "aligned")
 files <- list.files(map_root, pattern = "*.tif$")
 
@@ -34,14 +35,49 @@ descriptive_name <- sapply(map_ids, function(x) paste(x$source, "on", x$grid))
 names(map_ids) <- descriptive_name
 maps <- lapply(files, function(x) raster::raster(fs::path(map_root, x)))
 names(maps) <- descriptive_name
+for (assign_idx in 1:length(maps)) {
+  attr(maps[[assign_idx]], "resolution") <- map_ids[[assign_idx]]$resolution
+}
 ```
 
 # Summary Statistics
 
 The first figure is summary statistics, done at the pixel level.
 
+The urban population is a little complicated because the fine-grained
+data can count the space between high-rises as non-urban, so we use
+a kernel density estimator. We should use a consistent bandwidth,
+so let's get that using a standard bandwidth estimator on the
+golden data. We have to calculate that bandwidth in projection
+because the kernel density estimator only works in projection.
+
+```{r calculate_bandwidth}
+point_bandwidth <- function() {
+  pop_gps <- read_bimep_point_data(local_directory = data_dir)
+  pop_projected <- sf::st_transform(
+    pop_gps,
+    crs = "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
+    )
+  coordinates <- sf::st_coordinates(pop_projected)
+  lon_bw <- power_bandwidth(coordinates[[, "X"]])
+  lat_bw <- power_bandwidth(coordinates[[, "Y"]])
+  sqrt(lon_bw * lat_bw)
+}
+bandwidth <- point_bandwidth()
+bandwidth
+```
+
+We also need the Bioko outline for the kernel density.
+```{r}
+bioko_sf <- sf::st_read(fs::path(data_dir, "source", "bioko.shp"))
+```
+
+
 ```{r summary_statistics}
-summary_stats <- lapply(maps, summary_statistics)
+summary_help <- function(amap) {
+  summary_statistics(amap, attr(amap, "resolution"), bioko_sf, bandwidth)
+}
+summary_stats <- lapply(maps, summary_help)
 summary_df <- do.call(rbind, summary_stats)
 rownames(summary_df) <- names(maps)
 t(summary_df)

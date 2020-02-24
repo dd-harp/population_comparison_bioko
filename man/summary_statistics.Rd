@@ -4,7 +4,7 @@
 \alias{summary_statistics}
 \title{Compute basic summary statistics.}
 \usage{
-summary_statistics(population)
+summary_statistics(population, resolution, bioko_sf, bandwidth)
 }
 \arguments{
 \item{population}{raster::raster of population data.}

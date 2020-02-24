@@ -86,6 +86,30 @@ bimep_named_vector <- function(grid_100m) {
 }
 
 
+#' Read BIMEP point data
+#'
+#' BIMEP point data is longitude-latitude data with people
+#' in each house. This is only available within the collaboration.
+#'
+#' @param local_directory where external data is stored.
+#' @export
+read_bimep_point_data <- function(local_directory = "inst/extdata") {
+  popm_csv <- fs::path(local_directory, "source", "hh_pop_bioko.csv")
+  pops <- read.table(
+    popm_csv,
+    stringsAsFactors = FALSE, header = TRUE, sep = ",")
+  without_index <- pops[, !names(pops) %in% c("index")]
+  names(without_index) <- c("lon", "lat", "pop")
+  projected_cell_center <- lapply(1:nrow(pops), function(idx) {
+    sf::st_point(c(pops[idx, "lon"], pops[idx, "lat"]))
+  })
+  sf::st_sf(
+    st_as_sfc(projected_cell_center),
+    pop = without_index$pop,
+    crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+  )
+}
+
 #' Turns each population entry into a lat-long coordinate.
 #'
 #' This reads the `popm.csv` of population at 100m grid points.
@@ -125,20 +149,7 @@ bimep_population_as_points <- function(local_directory = "inst/extdata") {
 #'   zero or a pop value on land.
 #' @export
 bimep_on_grid <- function(grid, bioko_sf, local_directory = "inst/extdata") {
-  popm_csv <- fs::path(local_directory, "source", "hh_pop_bioko.csv")
-  pops <- read.table(
-    popm_csv,
-    stringsAsFactors = FALSE, header = TRUE, sep = ",")
-  without_index <- pops[, !names(pops) %in% c("index")]
-  names(without_index) <- c("lon", "lat", "pop")
-  projected_cell_center <- lapply(1:nrow(pops), function(idx) {
-    sf::st_point(c(pops[idx, "lon"], pops[idx, "lat"]))
-  })
-  features <- sf::st_sf(
-    st_as_sfc(projected_cell_center),
-    pop = without_index$pop,
-    crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-  )
+  features <- read_bimep_point_data(local_directory)
   house_and_na <- raster::rasterize(features, grid, fun = sum, field = "pop")
   hrsl_zero_mask <- raster::rasterize(bioko_sf, grid, field = 0)
   house_and_zero <- raster::cover(house_and_na, hrsl_zero_mask)

@@ -19,4 +19,7 @@ will be written to a subdirectory of that.}
 \description{
 Our intermediate datasets go into a directory with a given format.
 We write these files into an `aligned` subdirectory of the local directory.
+The name is (grid, resolution, source), in that order. That way
+they are near each other when you `dir()`.
+This also ensures the name of the layer matches the source name.
 }

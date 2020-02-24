@@ -175,8 +175,8 @@ WorldPop is 100m, like the HRSL data, so we aggregate it.
 worldpop <- raster::raster(fs::path(data_dir, "Equatorial_Guinea_100m_Population", "GNQ15v2.tif"))
 worldpop <- raster::crop(worldpop, bioko_sf, snap = "out")
 worldpop_id <- list(source = "WorldPop", grid = "WorldPop", resolution = 100)
-hrsl_id <- worldpop_id
-hrsl_id$source <- "HRSL"
+bimep_id <- worldpop_id
+bimep_id$source <- "BIMEP"
 popbioko::write_aligned_raster(
   worldpop,
   worldpop_id,
@@ -186,7 +186,7 @@ bimep_on_worldpop <- bimep_on_grid(
   worldpop, bioko_sf, local_directory = data_dir)
 popbioko::write_aligned_raster(
   bimep_on_worldpop,
-  hrsl_id,
+  bimep_id,
   local_directory = data_dir
 )
 aggregate_and_write(
@@ -195,7 +195,7 @@ aggregate_and_write(
 )
 aggregate_and_write(
   bimep_on_worldpop,
-  hrsl_id
+  bimep_id
 )
 ```
 

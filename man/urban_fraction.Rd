@@ -16,4 +16,7 @@ Fraction, out of 1, of the land area that
 \description{
 The urban fraction is the fraction of land area
 that has over 1000 people per square kilometer.
+This function does something simple. It calculates all
+points that are greater than a cutoff, as a fraction of
+all non-NA points.
 }
