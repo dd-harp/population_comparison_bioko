@@ -59,16 +59,29 @@ point_bandwidth <- function() {
     crs = "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
     )
   coordinates <- sf::st_coordinates(pop_projected)
-  lon_bw <- power_bandwidth(coordinates[[, "X"]])
-  lat_bw <- power_bandwidth(coordinates[[, "Y"]])
+  lon_bw <- power_bandwidth(coordinates[, "X"])
+  lat_bw <- power_bandwidth(coordinates[, "Y"])
   sqrt(lon_bw * lat_bw)
 }
 bandwidth <- point_bandwidth()
 bandwidth
 ```
+That number is really low. Probably only appropriate for the
+point data. What's the number when we use the raster information?
+
+```{r bandwidth_from_raster}
+utm_projection <- "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
+one_projected <- raster::projectRaster(maps$`BIMEP on HRSL1000`,
+                                       crs = utm_projection)
+power_bandwidth(raster::coordinates(one_projected)[, 1])
+```
+```{r trial_bandwidth}
+bandwidth <- 2.5
+```
+
 
 We also need the Bioko outline for the kernel density.
-```{r}
+```{r load_bioko_outline}
 bioko_sf <- sf::st_read(fs::path(data_dir, "source", "bioko.shp"))
 ```
 

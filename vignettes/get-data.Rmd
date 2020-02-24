@@ -130,7 +130,7 @@ popbioko::write_aligned_raster(
 
 ```{r write_1000m_hrsl}
 aggregate_and_write <- function(raster, name) {
-  aggregated <- raster::aggregate(raster, face = 10, fun = sum, expand = TRUE)
+  aggregated <- raster::aggregate(raster, fact = 10, fun = sum, expand = TRUE)
   popbioko::write_aligned_raster(
     aggregated,
     list(source = name$source, grid = name$grid, resolution = 10 * name$resolution),

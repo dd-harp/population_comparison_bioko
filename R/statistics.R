@@ -33,6 +33,41 @@ power_bandwidth <- function(val) {
 }
 
 
+#' Create a map with density estimation
+#'
+#' Calculating urban fraction by pixel is strange when
+#' you have 100 m pixels because urban fraciton is 1000
+#' people in a square kilometer, which is 10 people in
+#' a square 100 m, so it's more than one large household.
+#'
+#' Therefore, we use a kernel density estimator for these
+#' grid resolutions.
+#' @param population_array a Raster of population
+#' @param bioko_sf Shapefile for bioko borders
+#' @param bandwidth A bandwidth to use for the kernel density estimator
+#'   You have to choose this number. Take a look at `power_bandwidth`.
+#' @param cutoff The minimum that determines
+#' @return A fraction that are above that level
+#' @export
+density_estimated <- function(
+  population,
+  bioko_sf,
+  bandwidth,
+  urban_cutoff = 10
+) {
+  utm_projection <- "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
+  projected <- raster::projectRaster(population, crs = utm_projection)
+  bioko_projected <- sf::st_transform(bioko_sf, utm_projection)
+  tmaptools::smooth_map(
+    projected,
+    cover = bioko_projected,
+    bandwidth = bandwidth,
+    breaks = urban_cutoff
+  )
+}
+
+
+
 #' Calculate urban fraction using a density estimator
 #'
 #' Calculating urban fraction by pixel is strange when
@@ -55,17 +90,13 @@ urban_fraction_by_density_estimator <- function(
   bandwidth,
   urban_cutoff = 10
   ) {
-  utm_projection <- "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
-  projected <- raster::projectRaster(population, crs = utm_projection)
-  bioko_projected <- sf::st_transform(bioko_sf, utm_projection)
-  density <- tmaptools::smooth_map(
-    projected,
-    cover = bioko_projected,
-    bandwidth = bandwidth,
-    breaks = urban_cutoff
-    )
-  vals <- raster::values(density$raster)
-  sum(vals > urban_cutoff, na.rm = TRUE) / sum(!is.na(vals))
+  density <- density_estimated(population, bioko_sf, bandwidth, urban_cutoff)
+  # The kernel density estimator returns both a raster and polygons.
+  # We set breaks so that all area greater than the cutoff is in the
+  # second polygon.
+  fraction_area <- sf::st_area(density$polygons[2, ]) / sf::st_area(bioko_sf)
+  units(fraction_area) <- NULL
+  fraction_area
 }
 
 
@@ -112,12 +143,12 @@ summary_statistics <- function(population, resolution, bioko_sf, bandwidth) {
   )
   population_array <- raster::as.array(population)
   list(
-    maximum = max(population_array, na.rm = TRUE),
     total = sum(population_array, na.rm = TRUE),
-    empty_fraction = sum(population_array < 1, na.rm = TRUE) / sum(!is.na(population_array)),
+    maximum = max(population_array, na.rm = TRUE),
+    empty_percent = 100 * sum(population_array < 1, na.rm = TRUE) / sum(!is.na(population_array)),
     pareto_fraction = pareto_fraction(population_array),
-    urban_fraction = urban_fraction(population_array, urban_cutoff = urban_cutoff),
-    urban_density = urban_density,
-    na_fraction = sum(is.na(population_array)) / length(population_array)
+    urban_percent = 100 * urban_fraction(population_array, urban_cutoff = urban_cutoff),
+    urban_density = 100 * urban_density,
+    na_percent = 100 * sum(is.na(population_array)) / length(population_array)
   )
 }
