@@ -1,9 +1,15 @@
 ---
 title: "Get Data"
 output:
-  pdf_document: default
-  html_document:
-    df_print: paged
+  pdf_document:
+    number_sections: true
+    df_print: kable
+header-includes:
+  - \usepackage{palatino}
+# The params block means you can put the data anywhere you like and
+# then render this document by passing a parameter to the rmarkdown render command.
+params:
+  data_directory: !r fs::path(rprojroot::find_root(rprojroot::is_rstudio_project), "inst", "extdata")
 ---
 
 ```{r knitr_options, include = FALSE}
@@ -15,14 +21,6 @@ knitr::opts_chunk$set(
 )
 ```
 
-```{r setup}
-library(popbioko)
-library(rprojroot)
-library(sp)
-library(sf)
-library(tmap)
-library(GISTools)
-```
 
 # Overview
 This notebook retrieves input data and converts it into
@@ -53,23 +51,33 @@ and 0 values inland of the ocean.
 
 We could also rescale populations according to the growth rate
 for Bioko. A commonly-used adjustment is to
-multiply values by $exp(rt)$, where $r$ is the yearly growth rate.
+multiply values by $\exp(rt)$, where $r$ is the yearly growth rate.
 This wouldn't affect the structure of zeroes, though.
 
 
+```{r load_libraries, include = FALSE}
+library(popbioko)
+library(rprojroot)
+library(sp)
+library(sf)
+library(tmap)
+library(GISTools)
+```
 # Get Datasets
 Specify a directory into which to put the data.
 The `inst/extdata` subdirectory is a popular place.
 ```{r data_dir}
-data_dir <- fs::path(rprojroot::find_root(rprojroot::is_rstudio_project), "inst", "extdata")
+data_dir <- params$data_directory
 if (!dir.exists(data_dir)) {
   dir.create(data_dir, recursive = TRUE)
 }
 ```
-The data will be stored in `$r data_dir$`.
+The data will be stored in `r data_dir`.
 
+The Bioko shapefile has one geometry, a polygon outline
+of Bioko. We will use it to project population from rasters.
 ```{r predefinitions}
-lat_long_proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+latitude_longitude_projection <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 bioko_sf <- sf::st_read(fs::path(data_dir, "source", "bioko.shp"))
 ```
 
@@ -100,7 +108,8 @@ Bioko data on that grid is saved as `HRSL100_Bioko.tif`.
 The HRSL marks where houses are with values and everywhere else with NA.
 The incoming data is for all of Equatorial Guinea, so we crop it.
 We need to have zeroes where there is land, so add the zeroes
-to the HRSL. Otherwise, we don't modify values.
+to the HRSL. Pixels with no land are marked NA.
+Otherwise, we don't modify values.
 ```{r hrsl_original}
 hrsl_raster <- read_hrsl(local_directory = data_dir)
 hrsl_raster_crop <- raster::crop(hrsl_raster, bioko_sf, snap = "out")
@@ -259,7 +268,7 @@ coarse_grid_copy <- make_fresh_grid(grid_info$bbox, grid_info$dimensions)
 We can show the original and copy in unprojected space
 in order to see that they overlap.
 ```{r compare_1km_grids, fig.cap = "The original and our copy overlap.", dependson = "grid_copy"}
-grid_1km <- sf::st_transform(grids$coarse, crs = lat_long_proj)
+grid_1km <- sf::st_transform(grids$coarse, crs = latitude_longitude_projection)
 tm_shape(coarse_grid_copy) +
   tm_polygons(alpha = 0.1, border.col = "red") +
   tm_shape(grid_1km) +
@@ -277,7 +286,7 @@ km_raster <- raster::raster(
   ymn = grid_info$bbox["ymin"],
   ymx = grid_info$bbox["ymax"]
   )
-raster::projection(km_raster) <- lat_long_proj
+raster::projection(km_raster) <- latitude_longitude_projection
 ```
 
 Let's get some points to project to that raster.
