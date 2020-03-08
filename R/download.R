@@ -211,3 +211,44 @@ write_aligned_raster <- function(layer, layer_id, local_directory = "inst/extdat
     format = "GTiff"
   )
 }
+
+
+#' Given filenames, decode them into traits of the file.
+#'
+#' @param filenames A character vector of filenames
+#' @return A dataframe with parameters of the files.
+#' @export
+filenames_to_description <- function(filenames) {
+  description_df <- data.frame(
+    filename = filenames,
+    name = filenames,
+    resolution = rep(100L, length(filenames)),
+    source = filenames,
+    grid = filenames,
+    stringsAsFactors = FALSE
+  )
+  for (file_idx in 1:length(filenames)) {
+    filename <- filenames[file_idx]
+    splitted <- strsplit(filename, "[_.]")[[1]]
+    grid_with_resolution <- splitted[1]
+    source <- splitted[2]
+    match <- regexpr("[0-9]+", grid_with_resolution)
+    if (match >= 0) {
+      grid <- substr(grid_with_resolution, 1, match - 1)
+      resolution <- as.integer(substr(
+        grid_with_resolution, match, match + attr(match, "match.length")))
+    } else {
+      stop(paste("Cannot match filename", filename))
+    }
+    if (resolution == 100) {
+      full_name <- paste(source, "on", grid, "100m")
+    } else if (resolution == 1000) {
+      full_name <- paste(source, "on", grid, "1km")
+    } else {
+      stop("unknown resolution")
+    }
+    description_df[file_idx, ] <- list(filename, full_name, resolution, source, grid)
+  }
+  rownames(description_df) <- description_df$name
+  description_df
+}

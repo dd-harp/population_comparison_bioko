@@ -104,6 +104,11 @@ The names are of the form `<grid><resolution>_<source>.tif`.
 So the HRSL is on a 100m grid. It is saved as `HRSL100_HRSL.tif`.
 Bioko data on that grid is saved as `HRSL100_Bioko.tif`.
 
+For each grid, the code to project the GPS data is the same.
+```{r project_bimep, code = capture.output(dump("bimep_on_grid", ""))}
+```
+
+
 ## HRSL
 The HRSL marks where houses are with values and everywhere else with NA.
 The incoming data is for all of Equatorial Guinea, so we crop it.
@@ -162,7 +167,8 @@ LandScan is 1 km data, so we don't aggregate it.
 ```{r landscan_to_grid}
 landscan <- read_landscan(local_directory = data_dir)
 landscan <- raster::crop(landscan, bioko_sf, snap = "out")
-bimep_on_landscan <- bimep_on_grid(landscan, bioko_sf, local_directory = data_dir)
+bimep_on_landscan <- bimep_on_grid(
+  landscan, bioko_sf, local_directory = data_dir)
 popbioko::write_aligned_raster(
   landscan,
   list(source = "LandScan", grid = "LandScan", resolution = 1000),
@@ -174,6 +180,22 @@ popbioko::write_aligned_raster(
   local_directory = data_dir
 )
 ```
+Actually, let's disaggregate it, to see what happens if we use it at 100m.
+```{r disaggregate_landscan}
+landscan100 <- raster::disaggregate(landscan, fact = 10)
+bimep_on_landscan100 <- bimep_on_grid(
+  landscan100, bioko_sf, local_directory = data_dir)
+popbioko::write_aligned_raster(
+  landscan,
+  list(source = "LandScan", grid = "LandScan", resolution = 100),
+  local_directory = data_dir
+)
+popbioko::write_aligned_raster(
+  bimep_on_landscan,
+  list(source = "BIMEP", grid = "LandScan", resolution = 100),
+  local_directory = data_dir
+)
+```
 
 
 ## WorldPop
@@ -181,7 +203,8 @@ popbioko::write_aligned_raster(
 WorldPop is 100m, like the HRSL data, so we aggregate it.
 
 ```{r worldpop_to_grid}
-worldpop <- raster::raster(fs::path(data_dir, "Equatorial_Guinea_100m_Population", "GNQ15v2.tif"))
+worldpop <- raster::raster(fs::path(
+  data_dir, "Equatorial_Guinea_100m_Population", "GNQ15v2.tif"))
 worldpop <- raster::crop(worldpop, bioko_sf, snap = "out")
 worldpop_id <- list(source = "WorldPop", grid = "WorldPop", resolution = 100)
 bimep_id <- worldpop_id
