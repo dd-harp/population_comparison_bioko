@@ -6,7 +6,7 @@
 #' assumes a minimum value, and this applies to any distribution.
 #'
 #' @param density This is a sortable, summable vector.
-#' @result The fraction, usually presented as $100(1 - fraction, fraction)$.
+#' @return The fraction, usually presented as $100(1 - fraction, fraction)$.
 #' @export
 pareto_fraction <- function(density) {
   density <- sort(density)
@@ -24,8 +24,10 @@ pareto_fraction <- function(density) {
 #' @param val A list of coordinates in one dimension.
 #' @return A single numeric for the bandwidth.
 #'
-#' @example
+#' @examples
+#' \dontrun{
 #' density <- tmap::smooth_map(raster, bandwidth = power_bandwidth(raster))
+#' }
 #' @export
 power_bandwidth <- function(val) {
   one_km <- 1000  # meters
@@ -128,19 +130,17 @@ urban_fraction <- function(population_array, urban_cutoff = 1000) {
 #' of this administrative unit.
 #'
 #' @param population raster::raster of population data.
+#' @param resolution of the raster
+#' @param projection A proj.4 projection
 #' @return A list with the statistics, which are maximum value, total
 #'     population, pareto fraction, urban fraction, and NA fraction.
 #'     Columns are `maximum`, `total`, `empty_fraction`, `pareto_fraction`,
 #'     `urban_fraction`, `na_fraction`.
 #' @export
-summary_statistics <- function(population, resolution, bioko_sf, bandwidth) {
-  urban_cutoff <- round(10 * (resolution / 100)^2)
-  urban_density <- urban_fraction_by_density_estimator(
-    population,
-    bioko_sf,
-    bandwidth = bandwidth,
-    urban_cutoff = urban_cutoff
-  )
+summary_statistics <- function(population, resolution, bioko_sf, projection) {
+  urban <- 1500L
+  urban_cutoff <- round((urban / 100) * (resolution / 100)^2)
+  urban_density <- urban_fraction_by_point_density(population, projection, urban)
   population_array <- raster::as.array(population)
   list(
     total = sum(population_array, na.rm = TRUE),

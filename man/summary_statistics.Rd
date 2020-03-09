@@ -4,10 +4,14 @@
 \alias{summary_statistics}
 \title{Compute basic summary statistics.}
 \usage{
-summary_statistics(population, resolution, bioko_sf, bandwidth)
+summary_statistics(population, resolution, bioko_sf, projection)
 }
 \arguments{
 \item{population}{raster::raster of population data.}
+
+\item{resolution}{of the raster}
+
+\item{projection}{A proj.4 projection}
 }
 \value{
 A list with the statistics, which are maximum value, total

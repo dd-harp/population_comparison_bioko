@@ -13,10 +13,12 @@ library(curl)
 #'
 #' @return A list of configuration parameters.
 #'
-#' @example
+#' @examples
+#' \dontrun{
 #' [Default]
 #' SCPHOST = computer-name.ihme.uw.edu
 #' SCPHOSTBASE = /path/to/data/directory
+#' }
 #'
 #' @export
 data_configuration <- function() {

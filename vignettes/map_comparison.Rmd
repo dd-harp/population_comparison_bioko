@@ -21,6 +21,10 @@ This notebook calculates metrics from a population density map
 by comparing them with a gold standard map.
 
 ```{r load_libraries, include = FALSE}
+library(maptools)
+library(sf)
+library(sp)
+library(spatstat)
 library(popbioko)
 ```
 
@@ -43,10 +47,11 @@ files_df
 ```
 There are 12 rows for (3 data sources) x (2 resolutions each) x (data source and BIMEP comparison).
 
-We will need some canonical projections, too.
-UTM is a projection that will give us the island measured in meters.
+We will need some canonical projections, too. Universal Transverse Mercator (UTM)
+is a projection that will give us the island measured in meters.
 ```{r canonical_projections}
 utm_projection <- "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
+bioko_sf <- sf::st_read(fs::path(data_dir, "source", "bioko.shp"))
 ```
 
 
@@ -79,83 +84,102 @@ to measure population density.
 3. Use a kernel density estimator to treat pixels as
    samples from a population density surface.
 
-In order to try a kernel density estimator, we should use a consistent bandwidth,
-so let's get that using a standard bandwidth estimator on the
-golden data. We have to calculate that bandwidth in projection
-because the kernel density estimator only works in projection.
+### Kernel Density Estimation
 
-```{r}
-landscan1km_landscan <- maps[["LandScan on LandScan 1km"]]
-raster_to_im <- function(raster_image) {
-  numeric_matrix <- raster::as.matrix(raster_image)
-  xrange <- c(raster::xmin(raster_image), raster::xmax(raster_image))
-  yrange <- c(raster::ymin(raster_image), raster::ymax(raster_image))
-  # spatstat::im(numeric_matrix[nrow(numeric_matrix):1, ], xrange = xrange, yrange = yrange)
-  x <- raster::xFromCol(raster_image, 1:raster::ncol(raster_image))
-  y <- raster::yFromRow(raster_image, 1:raster::nrow(raster_image))
-  spatstat::im(numeric_matrix[nrow(numeric_matrix):1, ], xcol = x, yrow = y)
-}
-raster_sum <- raster::cellStats(landscan1km_landscan, stat = "sum", na.rm = TRUE)
-ls1km_ls_im <- maptools::as.im.RasterLayer(landscan1km_landscan)
-point_pattern <- spatstat::rpoispp(ls1km_ls_im, nsim = 1)
+Kernel density estimation is a way to determine density from
+a point set. We have a grid, not points, so we take a few
+steps.
 
-# Notice if we're off by a factor of 10.
-# That means we're not setting raster pixels as a rate per unit area.
-stopifnot(point_pattern$n > 0.5 * raster_sum)
-stopifnot(point_pattern$n < 1.5 * raster_sum)
+1. Convert the grid into a rate per unit area.
+2. Sample points from that grid using a poisson process
+   for each cell.
+3. Project the points into a plane measured in meters.
+4. Estimate percent urban from the resulting points.
 
-project_points <- function(points, projection) {
-  xy <- proj4::project(list(points$x, points$y), projection)
-  xrange <- c(min(xy$x), max(xy$x))
-  spatstat::ppp(xy[["x"]], xy[["y"]], window = spatstat::owin(xrange = xrange, yrange = c(min(xy$y), max(xy$y))))
-}
-projected <- project_points(point_pattern, utm_projection)
-dens <- spatstat::density.ppp(projected)
+This work will use the `raster` and `spatstat` packages
+for statistics, and it will use the `proj4` package
+to project the points from latitude-longitude to UTM.
+
+```{r baseline_expectations_pop}
+pop_raster <- maps[["LandScan on LandScan 1km"]]
+sum(raster::values(pop_raster) > 1500, na.rm = TRUE) / nrow(pop_raster) / ncol(pop_raster)
 ```
+
+```{r estimator, code = capture.output(dump("population_density_estimator", ""))}
+```
+
+
+```{r convert_grid_into_rate_per_unit_area, code = capture.output(dump("urban_fraction_by_point_density", ""))}
+pop_raster <- maps[["LandScan on LandScan 1km"]]
+# We want the lat-long area, which isn't a distance but a solid angle.
+pixel_width <- raster::xFromCol(pop_raster, ncol(pop_raster) / 2 + 1) -
+  raster::xFromCol(pop_raster, ncol(pop_raster) / 2)
+pixel_height <- raster::yFromRow(pop_raster, nrow(pop_raster) / 2 + 1) -
+  raster::yFromRow(pop_raster, nrow(pop_raster) / 2)
+latlong_pixel_area <- abs(pixel_width * pixel_height)
+rate_raster <- pop_raster / latlong_pixel_area
+```
+
+It will help to use the Bioko outlines for windowing
+in spatstat. You need to translate sf to sp to sp geometry
+to spatstat owin.
+```{r bioko_spatsat}
+bioko_sp <- as(bioko_sf, Class = "Spatial")
+bioko_sp_polygon <- as(bioko_sp, "SpatialPolygons")
+# Cannot make an owin from an unprojected space. Apparently.
+bioko_proj_sf <- sf::st_transform(bioko_sf, crs = utm_projection)
+# The projected space will have points outside. Let's make a little
+# buffer to catch those points.
+meters <- 1
+bioko_buffer_sf <- sf::st_buffer(bioko_proj_sf, 500 * meters)
+bioko_proj_sp <- as(bioko_proj_sf, Class = "Spatial")
+bioko_proj_polygon_sp <- as(bioko_proj_sp, "SpatialPolygons")
+bioko_owin <- as.owin(bioko_proj_polygon_sp)
+```
+
+
+```{r compute_density, eval = FALSE}
+pop_raster <- maps[["LandScan on LandScan 1km"]]
+ls1km_density <- urban_fraction_by_point_density(pop_raster, utm_projection, 1500)
+ls1km_density
+```
+
 
 Landscan measures people in thousands, so urban is pixels
-above `r 1500 / (10^3)^2 / 1000`
+above `r 1500 / (10^3)^2 / 1000`. The population density is
+on a map in meters, so let's count the pixel size in square meters.
 
-
-```{r calculate_bandwidth}
-point_bandwidth <- function() {
-  pop_gps <- read_bimep_point_data(local_directory = data_dir)
-  pop_projected <- sf::st_transform(
-    pop_gps,
-    crs = "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
-    )
-  coordinates <- sf::st_coordinates(pop_projected)
-  lon_bw <- power_bandwidth(coordinates[, "X"])
-  lat_bw <- power_bandwidth(coordinates[, "Y"])
-  sqrt(lon_bw * lat_bw)
-}
-bandwidth <- point_bandwidth()
-bandwidth
-```
-That number is really low. Probably only appropriate for the
-point data. What's the number when we use the raster information?
-
-```{r bandwidth_from_raster}
-one_projected <- raster::projectRaster(maps$`BIMEP on HRSL1000`,
-                                       crs = utm_projection)
-power_bandwidth(raster::coordinates(one_projected)[, 1])
-```
-
-
-We also need an outline of Bioko in order to tell the kernel density
-when it's at the edge of habitable space.
-```{r load_bioko_outline}
-bioko_sf <- sf::st_read(fs::path(data_dir, "source", "bioko.shp"))
-```
 
 
 ```{r summary_statistics}
-summary_help <- function(amap) {
-  summary_statistics(amap, attr(amap, "resolution"), bioko_sf, bandwidth)
+summary_help <- function(map_idx) {
+  amap <- maps[[map_idx]]
+  resolution <- files_df$resolution[map_idx]
+  popbioko::summary_statistics(amap, resolution, bioko_sf, utm_projection)
 }
-summary_stats <- lapply(maps, summary_help)
-summary_df <- do.call(rbind, summary_stats)
-rownames(summary_df) <- names(maps)
-t(summary_df)
+summary_stats <- lapply(1:length(maps), summary_help)
+summary_list <- do.call(rbind, summary_stats)
+rownames(summary_list) <- names(maps)
+summary_df <- as.data.frame(summary_list)
+summary_df["name"] <- rownames(summary_list)
+summary_df <- merge(summary_df, files_df, by = "name")
+```
+```{r}
+t(summary_df[summary_df$grid == "HRSL", ])
 ```
 
+```{r}
+t(summary_df[summary_df$grid == "WorldPop", ])
+```
+
+```{r}
+t(summary_df[summary_df$grid == "LandScan", ])
+```
+
+```{r}
+t(summary_df[summary_df$resolution == 100, ])
+```
+
+```{r}
+t(summary_df[summary_df$resolution == 1000, ])
+```

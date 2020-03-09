@@ -9,6 +9,9 @@ pareto_fraction(density)
 \arguments{
 \item{density}{This is a sortable, summable vector.}
 }
+\value{
+The fraction, usually presented as $100(1 - fraction, fraction)$.
+}
 \description{
 This isn't the statistical estimator for a Pareto density
 function's parameters. It calculates a Pareto principle,

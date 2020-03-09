@@ -15,3 +15,8 @@ A single numeric for the bandwidth.
 \description{
 This is \eqn{\sigma_x\left(\frac{2}{3n}\frac)^{1/6}}.
 }
+\examples{
+\dontrun{
+density <- tmap::smooth_map(raster, bandwidth = power_bandwidth(raster))
+}
+}
