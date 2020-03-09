@@ -1,2 +1,12 @@
 .Rproj.user
+.Rhistory
+*.swp
 inst/doc
+
+*.pdf
+*.tif
+*.zip
+*.7z
+*.xml
+*.qgz
+*.csv
