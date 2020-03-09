@@ -13,7 +13,7 @@ power_bandwidth(val)
 A single numeric for the bandwidth.
 }
 \description{
-This is \eqn{\sigma_x\left(\frac{2}{3n}\frac)^{1/6}}.
+This is \eqn{\sigma_x\left(\frac{2}{3n}\right)^{1/6}}.
 }
 \examples{
 \dontrun{

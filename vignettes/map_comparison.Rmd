@@ -5,6 +5,7 @@ output:
   pdf_document:
     number_sections: true
     df_print: kable
+    toc: true
 header-includes:
   - \usepackage{palatino}
 # The params block means you can put the data anywhere you like and
@@ -84,6 +85,18 @@ to measure population density.
 3. Use a kernel density estimator to treat pixels as
    samples from a population density surface.
 
+### Raw Urban Fraction
+
+We measure pixel threshold as a number of people per square
+meter. We need to know the size of each pixel in order to do that.
+It helps to know how many pixels we're talking about, so we return
+the numerator and denominator of each fraction.
+```{r urban_fraction_raw, code = capture.output(dump("urban_fraction", ""))}
+```
+We can reuse this function for the kernel density estimation
+by applying it to the estimated density instead of the
+raw density.
+
 ### Kernel Density Estimation
 
 Kernel density estimation is a way to determine density from
@@ -105,19 +118,11 @@ pop_raster <- maps[["LandScan on LandScan 1km"]]
 sum(raster::values(pop_raster) > 1500, na.rm = TRUE) / nrow(pop_raster) / ncol(pop_raster)
 ```
 
-```{r estimator, code = capture.output(dump("population_density_estimator", ""))}
+```{r estimator, code = capture.output(dump("population_count_estimator", ""))}
 ```
 
 
 ```{r convert_grid_into_rate_per_unit_area, code = capture.output(dump("urban_fraction_by_point_density", ""))}
-pop_raster <- maps[["LandScan on LandScan 1km"]]
-# We want the lat-long area, which isn't a distance but a solid angle.
-pixel_width <- raster::xFromCol(pop_raster, ncol(pop_raster) / 2 + 1) -
-  raster::xFromCol(pop_raster, ncol(pop_raster) / 2)
-pixel_height <- raster::yFromRow(pop_raster, nrow(pop_raster) / 2 + 1) -
-  raster::yFromRow(pop_raster, nrow(pop_raster) / 2)
-latlong_pixel_area <- abs(pixel_width * pixel_height)
-rate_raster <- pop_raster / latlong_pixel_area
 ```
 
 It will help to use the Bioko outlines for windowing
@@ -149,37 +154,161 @@ Landscan measures people in thousands, so urban is pixels
 above `r 1500 / (10^3)^2 / 1000`. The population density is
 on a map in meters, so let's count the pixel size in square meters.
 
-
-
-```{r summary_statistics}
-summary_help <- function(map_idx) {
-  amap <- maps[[map_idx]]
-  resolution <- files_df$resolution[map_idx]
-  popbioko::summary_statistics(amap, resolution, bioko_sf, utm_projection)
+Let's make population maps for every incoming map.
+This step approximates the map values by projecting them from lat-long
+to UTM coordinates. It uses bilinear interpolation. We avoid this kind
+of approximation through most of our work. This step is less sensitive
+to interpolation because it will construct point process models during
+the `population_count_estimator`.
+```{r make_population_maps}
+raster_dir <- fs::path(params$data_directory, "density_raster")
+if (!dir.exists(raster_dir)) {
+  dir.create(raster_dir)
 }
-summary_stats <- lapply(1:length(maps), summary_help)
-summary_list <- do.call(rbind, summary_stats)
-rownames(summary_list) <- names(maps)
-summary_df <- as.data.frame(summary_list)
-summary_df["name"] <- rownames(summary_list)
-summary_df <- merge(summary_df, files_df, by = "name")
+for (map_idx in 1:nrow(files_df)) {
+  filename <- fs::path(raster_dir, files_df[map_idx, "filename"])
+  if (!file.exists(filename)) {
+    proj_raster <- raster::projectRaster(maps[[map_idx]], crs = utm_projection)
+    # Projection uses bilinear interpolation, which can cause negative values.
+    proj_raster <- raster::clamp(proj_raster, lower = 0)
+    pop_density_im <- population_count_estimator(proj_raster)
+    pop_density_raster <- im_to_raster(pop_density_im, utm_projection)
+    raster::writeRaster(pop_density_raster, filename = filename, format = "GTiff")
+  }
+}
 ```
+
+The density maps are saved as GeoTIFFs in the `density_raster` subdirectory,
+so load them here before making the summary table.
+```{r load_densities}
+density <- lapply(files_df$filename, function(x) raster::raster(fs::path(raster_dir, x)))
+names(density) <- names(maps)
+```
+
+## Construct the Summary Statistics Table
+This function makes the first table in the paper.
+It makes data for two urban densities, 1000 people per square km
+and 1500 people per square km. We use the former to compare
+with the current numbers, but the latter is what Equatorial
+Guinea uses to define urban.
+```{r summary_statistics}
+summary_help <- function(urban_cutoff) {
+  function(map_idx) {
+    popbioko::summary_statistics(
+      maps[[map_idx]], density[[map_idx]], urban_per_kilometer_sq = urban_cutoff
+      )
+  }
+}
+
+
+make_summary_df <- function(urban_cutoff) {
+  summary_stats <- lapply(1:length(maps), summary_help(urban_cutoff))
+  summary_list <- do.call(rbind, summary_stats)
+  rownames(summary_list) <- names(maps)
+  summary_df <- as.data.frame(summary_list)
+  summary_df["name"] <- rownames(summary_list)
+  summary_df <- merge(summary_df, files_df, by = "name")
+}
+summary1000_df <- make_summary_df(1000)
+summary1500_df <- make_summary_df(1500)
+names(summary1500_df)
+```
+
+Those dataframes are both strings and numeric. When we rotate them,
+they will be all strings, so let's do the conversion by hand.
+```{r hrsl_only_shown}
+for_show <- function(summary_df) {
+  urban_raw_percent <- as.numeric(summary_df[, "urban_raw"]) * 100
+  urban_percent <- as.numeric(summary_df[, "urban_fit"]) * 100
+  data.frame(
+    source = summary_df$source,
+    grid = summary_df$grid,
+    resolution = as.character(summary_df$resolution),
+    total = sprintf("%.0f", summary_df$total),
+    maximum = sprintf("%.0f", summary_df$maximum),
+    empty_percent = sprintf("%.4g", summary_df$empty_percent),
+    na_percent = sprintf("%.4g", summary_df$na_percent),
+    urban_raw = sprintf("%.4g", urban_raw_percent),
+    urban_fit = sprintf("%.4g", urban_percent),
+    pareto_fraction = sprintf("%.4g", 100 * as.numeric(summary_df$pareto_fraction))
+  )
+}
+show1000_df <- for_show(summary1000_df)
+show1500_df <- for_show(summary1500_df)
+```
+## Comparison Tables
+
+### Compare two urban fractions
+We're looking for trends that show there are fewer urban areas
+when we raise the urban criteria from 1000 people to 1500 people per square
+kilometer.
+```{r compare_the_two}
+as.data.frame(t(show1000_df[show1000_df$grid == "HRSL", ]))
+```
+
+
 ```{r}
-t(summary_df[summary_df$grid == "HRSL", ])
+as.data.frame(t(show1500_df[show1500_df$grid == "HRSL", ]))
+```
+
+### Compare maps of raw and estimated urban fractions
+We would like to see whether the estimated urban fraction has
+a reasonable-looking gaussian kernel size.
+```{r why_the_same}
+sq_m_per <- c(square_meters_per_pixel.raster(maps[[2]]), square_meters_per_pixel.raster(density[[2]]))
+sq_m_per
+```
+```{r cutoff_for_each}
+cutoffs <- data.frame(urban_per_meter_sq = c(1000, 1500) / 10^6)
+cutoffs["raw"] <- cutoffs[["urban_per_meter_sq"]] * square_meters_per_pixel.raster(maps[[2]])
+cutoffs["density"] <- cutoffs[["urban_per_meter_sq"]] * square_meters_per_pixel.raster(density[[2]])
+cutoffs
+```
+Plot these with cutoffs to see that the maps are similar.
+```{r make_sure_maps_similar}
+plot(maps[[2]] / cutoffs[1, "raw"])
+plot(maps[[2]] / cutoffs[2, "raw"])
+plot(density[[2]] / cutoffs[1, "density"])
+plot(density[[2]] / cutoffs[2, "density"])
+```
+
+### Compare across source grids
+This shows all HRSL grid together, then all WorldPop, then all LandScan.
+```{r}
+as.data.frame(t(show1500_df[show1500_df$grid == "HRSL", ]))
 ```
 
 ```{r}
-t(summary_df[summary_df$grid == "WorldPop", ])
+as.data.frame(t(show1500_df[show1500_df$grid == "WorldPop", ]))
 ```
 
 ```{r}
-t(summary_df[summary_df$grid == "LandScan", ])
+as.data.frame(t(show1500_df[show1500_df$grid == "LandScan", ]))
+```
+
+### Compare across resolutions
+This groups data with the same resolution.
+```{r}
+as.data.frame(t(show1500_df[show1500_df$resolution == 100, ]))
 ```
 
 ```{r}
-t(summary_df[summary_df$resolution == 100, ])
+as.data.frame(t(show1500_df[show1500_df$resolution == 1000, ]))
 ```
 
-```{r}
-t(summary_df[summary_df$resolution == 1000, ])
-```
+## Discussion
+
+- Using estimation to find the urban area matters for the 100m
+  data but not the 1km data.
+- I'm surprised at how much the BIMEP 100m numbers depend on
+  which 100m grid is used. For instance, the BIMEP on HRSL has a higher empty
+  percent than the others. I could understand this by regridding
+  BIMEP data to a set of evenly-spaced grids.
+- I don't know the implied year for HRSL here. The total populations
+  are different enough, that maybe I should use a growth rate
+  for correction.
+- The empty percent was very sensitive to my choice of lower
+  bound for empty. Should I make a graph of how different
+  datasets get close to zero? It's a problem for both WorldPop
+  and LandScan.
+

@@ -19,7 +19,7 @@ pareto_fraction <- function(density) {
 
 #' Estimate bandwidth for a density function kernel with Bowman and Azzalini.
 #'
-#' This is \eqn{\sigma_x\left(\frac{2}{3n}\frac)^{1/6}}.
+#' This is \eqn{\sigma_x\left(\frac{2}{3n}\right)^{1/6}}.
 #'
 #' @param val A list of coordinates in one dimension.
 #' @return A single numeric for the bandwidth.
@@ -102,25 +102,6 @@ urban_fraction_by_density_estimator <- function(
 }
 
 
-#' Calculate urban fraction of a raster::raster.
-#'
-#' The urban fraction is the fraction of land area
-#' that has over 1000 people per square kilometer.
-#' This function does something simple. It calculates all
-#' points that are greater than a cutoff, as a fraction of
-#' all non-NA points.
-#'
-#' @param population raster::raster of population data
-#' @return Fraction, out of 1, of the land area that
-#'     is urban.
-#' @export
-urban_fraction <- function(population_array, urban_cutoff = 1000) {
-  total <- sum(!is.na(population_array))
-  urban <- sum(population_array > urban_cutoff, na.rm = TRUE)
-  urban / total
-}
-
-
 #' Compute basic summary statistics.
 #'
 #' Computes total population, maximum population density,
@@ -130,25 +111,30 @@ urban_fraction <- function(population_array, urban_cutoff = 1000) {
 #' of this administrative unit.
 #'
 #' @param population raster::raster of population data.
-#' @param resolution of the raster
-#' @param projection A proj.4 projection
+#' @param density raster::raster that is density estimated population data
 #' @return A list with the statistics, which are maximum value, total
 #'     population, pareto fraction, urban fraction, and NA fraction.
 #'     Columns are `maximum`, `total`, `empty_fraction`, `pareto_fraction`,
 #'     `urban_fraction`, `na_fraction`.
 #' @export
-summary_statistics <- function(population, resolution, bioko_sf, projection) {
-  urban <- 1500L
-  urban_cutoff <- round((urban / 100) * (resolution / 100)^2)
-  urban_density <- urban_fraction_by_point_density(population, projection, urban)
+summary_statistics <- function(population, density, urban_per_kilometer_sq) {
   population_array <- raster::as.array(population)
+  pixel_size_km <- square_meters_per_pixel.raster(population) / 10^6
+  zero_cutoff <- 0.1 * pixel_size_km
+  raw_urban <- urban_fraction(population, urban_per_kilometer_sq)
+  fit_urban <- urban_fraction(density, urban_per_kilometer_sq)
   list(
     total = sum(population_array, na.rm = TRUE),
     maximum = max(population_array, na.rm = TRUE),
-    empty_percent = 100 * sum(population_array < 1, na.rm = TRUE) / sum(!is.na(population_array)),
-    pareto_fraction = pareto_fraction(population_array),
-    urban_percent = 100 * urban_fraction(population_array, urban_cutoff = urban_cutoff),
-    urban_density = 100 * urban_density,
+    empty_percent = 100 * sum(population_array < zero_cutoff, na.rm = TRUE) / sum(!is.na(population_array)),
+    # Use the fit values for pareto fraction so they are more stable.
+    pareto_fraction = pareto_fraction(raster::as.array(density)),
+    urban_num = raw_urban[1],
+    urban_den = raw_urban[2],
+    urban_raw = as.numeric(raw_urban[1]) / raw_urban[2],
+    urban_fit_num = fit_urban[1],
+    urban_fit_den = fit_urban[2],
+    urban_fit = as.numeric(fit_urban[1]) / fit_urban[2],
     na_percent = 100 * sum(is.na(population_array)) / length(population_array)
   )
 }

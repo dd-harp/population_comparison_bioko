@@ -18,3 +18,11 @@ If you want to make the config file, then create
 a file called `$HOME/.config/MASH/data.ini` and put
 the following in it:
 }
+\examples{
+\dontrun{
+[Default]
+SCPHOST = computer-name.ihme.uw.edu
+SCPHOSTBASE = /path/to/data/directory
+}
+
+}

@@ -4,6 +4,7 @@ output:
   pdf_document:
     number_sections: true
     df_print: kable
+    toc: true
 header-includes:
   - \usepackage{palatino}
 # The params block means you can put the data anywhere you like and
@@ -26,17 +27,28 @@ knitr::opts_chunk$set(
 This notebook retrieves input data and converts it into
 gridded data about population density. This notebook should retrieve
 and clean data so that we can pass that to another notebook to do statistics.
-The gold standard dataset is BIMEP, so we will re-grid the BIMEP data
-onto the same grids as the other datasets.
 
+The two sections here regrid in two different ways. The first section
+uses BIMEP GPS data, so we know where each house is. It re-grids
+the GPS data to each gridded dataset with which we will compare.
+You'll see that this matters for the 100m datasets but not for the 1km datasets.
+The second section uses the BIMEP area and section grids. It realigns
+HRSL, LandScan, and WorldPop to those grids.
 
-We have to take care with borders. All datasets are counts
-of people in a pixel. On borders with the water, these counts
-will be low, even if the density of people on land is high.
-We shouldn't calculate people per square meter of habitable land.
+## Concerns
+I have an initial concern about population counts near
+ocean borders. The population in the pixel will be entirely within the
+land border, and this is handled differently by different datasets.
+This could lead to different border population densities, and most
+of the population is near the water.
+We will see how much we can address this as we go.
 
-The size of each GeoTIFF will differ between LandScan, HRSL,
-and WorldPop, but each has a matched BIMEP dataset.
+We could also rescale populations according to the growth rate
+for Bioko. A commonly-used adjustment is to
+multiply values by $\exp(rt)$, where $r$ is the yearly growth rate.
+This wouldn't affect the structure of zeroes, though.
+
+## Conventions
 Pixels in the water should be marked as NA and excluded from
 calculations later.
 
@@ -49,10 +61,6 @@ are rectilinear in lat-long.
 We will ensure each dataset has NA values where it's ocean
 and 0 values inland of the ocean.
 
-We could also rescale populations according to the growth rate
-for Bioko. A commonly-used adjustment is to
-multiply values by $\exp(rt)$, where $r$ is the yearly growth rate.
-This wouldn't affect the structure of zeroes, though.
 
 
 ```{r load_libraries, include = FALSE}
@@ -63,7 +71,7 @@ library(sf)
 library(tmap)
 library(GISTools)
 ```
-# Get Datasets
+# Download Datasets
 Specify a directory into which to put the data.
 The `inst/extdata` subdirectory is a popular place.
 ```{r data_dir}
@@ -182,16 +190,17 @@ popbioko::write_aligned_raster(
 ```
 Actually, let's disaggregate it, to see what happens if we use it at 100m.
 ```{r disaggregate_landscan}
-landscan100 <- raster::disaggregate(landscan, fact = 10)
+factor <- 10
+landscan100 <- raster::disaggregate(landscan, fact = factor) / factor^2
 bimep_on_landscan100 <- bimep_on_grid(
   landscan100, bioko_sf, local_directory = data_dir)
 popbioko::write_aligned_raster(
-  landscan,
+  landscan100,
   list(source = "LandScan", grid = "LandScan", resolution = 100),
   local_directory = data_dir
 )
 popbioko::write_aligned_raster(
-  bimep_on_landscan,
+  bimep_on_landscan100,
   list(source = "BIMEP", grid = "LandScan", resolution = 100),
   local_directory = data_dir
 )
@@ -232,9 +241,10 @@ aggregate_and_write(
 ```
 
 
-# Align to Grids from a BIMEP 100m Grid
-This section uses BIMEP data at a 100m grid level.
-This is a raster dataset.
+# Make other datasets align to BIMEP study grids
+The BIMEP study uses two grids, at 100m and 1km resolution.
+This section reads population datasets and regrids them
+onto the BIMEP study datasets.
 
 
 The output is all GeoTIFFs with names of the form data-on-grid.
