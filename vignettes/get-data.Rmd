@@ -240,6 +240,12 @@ aggregate_and_write(
 )
 ```
 
+```{r plot_worldpop}
+tm_shape(worldpop) + tm_raster()
+```
+```{r bimep_on_worldpop_plot}
+tm_shape(bimep_on_worldpop) + tm_raster()
+```
 
 # Make other datasets align to BIMEP study grids
 The BIMEP study uses two grids, at 100m and 1km resolution.

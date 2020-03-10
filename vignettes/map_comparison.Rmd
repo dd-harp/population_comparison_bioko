@@ -22,10 +22,14 @@ This notebook calculates metrics from a population density map
 by comparing them with a gold standard map.
 
 ```{r load_libraries, include = FALSE}
+library(dplyr)
 library(maptools)
+library(plotrix)
 library(sf)
 library(sp)
 library(spatstat)
+library(viridis)
+
 library(popbioko)
 ```
 
@@ -312,3 +316,208 @@ as.data.frame(t(show1500_df[show1500_df$resolution == 1000, ]))
   datasets get close to zero? It's a problem for both WorldPop
   and LandScan.
 
+
+# Population Scatter Plots
+
+This section makes figure 4, scatter plots of population data versus ground truth
+population data. The density plots use maps of either resolution to plot
+estimated density per square km. The population size plots instead
+use the count of people in a pixel.
+
+Set up consistent colors for the different data sets.
+```{r set_colors, echo=FALSE}
+colors <- c(viridis::plasma(8, alpha = 1, begin = 0, end = 1)[c(1, 3, 5, 7)], grey(0.7))
+names(colors) <- c("BIMEP", "WorldPop", "LandScan", "HRSL", "grey")
+
+logarithmic_axis_labels <- c(
+  "1", "10", "100", "1,000", expression(10^4), expression(10^5), expression(10^6))
+```
+
+```{r log_offset_for_plot}
+log_offset <- function(offset) {
+  function(x) {
+    log(x + offset)
+  }
+}
+```
+
+```{r plot_all_together}
+logoff <- log_offset(1)
+symbol_size <- c(0.5, 0.25)
+names(symbol_size) <- c("1000", "100")
+symbol_choice <- c(19, 15)
+names(symbol_choice) <- c("1000", "100")
+
+
+map_from_source_resolution <- function(source, resolution, map_list) {
+  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == source, ]
+  x_map_name <- xy_df[xy_df$source == "BIMEP", "name"]
+  y_map_name <- xy_df[xy_df$source == source, "name"]
+  x <- raster::getValues(map_list[[x_map_name]])
+  y <- raster::getValues(map_list[[y_map_name]])
+  list(x = logoff(x), y = logoff(y))
+}
+
+
+#' This gets population counts, not density.
+xy_from_source_resolution <- function(source, resolution) {
+  map_from_source_resolution(source, resolution, maps)
+}
+  
+
+density_from_source_resolution <- function(source, resolution) {
+  map_from_source_resolution(source, resolution, density)
+}
+
+
+pop_scatter <- function(y_name, resolution, labels, title, maximum, background = NULL) {
+  for (plot_idx in 1:length(y_name)) {
+    y_source <- y_name[plot_idx]
+    y_resolution <- resolution[plot_idx]
+    xy <- xy_from_source_resolution(y_source, y_resolution)
+    cex <- symbol_size[as.character(y_resolution)]
+    pch <- symbol_choice[as.character(y_resolution)]
+    color <- colors[y_source]
+    if (!is.null(background) & plot_idx %in% background) {
+      color <- colors["grey"]
+    }
+    if (plot_idx == 1) {
+      plot(
+        xy, col = color, cex = cex, pch = pch,
+        xlim = c(0, maximum), ylim = c(0, maximum),
+        xlab = labels[[1]], ylab = labels[[2]], main = title,
+        xaxt = "n", yaxt = "n"
+        )
+      axis(1, logoff(10^c(0:5)), 10^c(0:5))
+      axis(2, logoff(10^c(0:5)), 10^c(0:5))
+      segments(logoff(0), logoff(0), logoff(10^5), logoff(10^5))
+      segments(logoff(1), logoff(1), logoff(1), logoff(10^5), col = colors["grey"])
+      segments(logoff(1), logoff(1), logoff(10^5), logoff(1), col = colors["grey"])
+
+    } else {
+      points(xy, col = color, cex = cex, pch = pch)
+    }
+  }
+}
+```
+
+```{r all_together}
+density_label <- c("BIMEP Population Density", "Mapped Population Density")
+maximum1k <- 1.01 * max(xy_from_source_resolution("LandScan", 1000)$y, na.rm = TRUE)
+the_three <- c("HRSL", "LandScan", "WorldPop")
+pop_scatter(
+  c(the_three, "HRSL", "WorldPop"), c(rep(1000, 3), rep(100, 2)),
+  density_label, "A", maximum1k)
+legend("topleft", legend =  the_three, col = colors[the_three],
+           lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
+```
+
+```{r plot_landscan_density}
+pop_scatter(
+  "LandScan", 1000,
+  density_label, "B) LandScan", maximum1k)
+```
+
+```{r plot_hrsl_density}
+pop_scatter(
+  rep("HRSL", 2), c(100, 1000),
+  density_label, "C) HRSL", maximum1k, background = 1)
+```
+
+```{r plot_woldpop_density}
+pop_scatter(
+  rep("WorldPop", 2), c(100, 1000),
+  density_label, "D) WorldPop", maximum1k, background = 1)
+```
+
+
+```{r}
+ff1 <- function(x,offset=0) {
+  log(1 + x + offset)
+  }
+
+scatter1k.add <- function(yy, cid = 5, ff = ff1, offset = 0, cx = .7) {
+  points(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19, cex = cx) 
+}
+
+scatter1k <- function(
+  yy, cid = 5, ff = ff1, offset = 0, cx = .7,
+  lgn = FALSE, tl = "", xlb = "BIMEP Population Density"
+  )
+  {
+  mx <- max(popk$lspop) * 1.01
+  plot(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19,
+       xlim = ff(c(0,mx)), ylim = ff(c(0,mx)), xaxt = "n", yaxt = "n",
+       xlab = xlb, ylab = "Mapped Population Density", cex = cx, main = tl)
+  axis(1, ff(10^c(0:5)), 10^c(0:5))
+  axis(2, ff(10^c(0:5)), 10^c(0:5))
+  segments(ff(0), ff(0), ff(10^5), ff(10^5))
+  segments(ff(1), ff(1), ff(1), ff(10^5), col = grey(0.7))
+  segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
+  scatter1k.add(yy,cid,ff,offset,cx)
+  if (lgn) {
+    legend("topleft", legend =  c("HRSL", "Landscan", "WorldPop"), col = col[c(7,5,3)],
+           lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
+  }
+}
+
+scatter100m <- function(
+  yy, gold = ddpop100, clr = gry, ff = ff1, offset = 0, cx = .7,
+  lgn = FALSE, tl = "", xlb = "BIMEP Population Density", ylb = "Population Density"
+  )
+  {
+  mx <- max(gold)*1.01
+  plot(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, xlim = ff(c(0,mx)),
+       ylim = ff(c(0,mx)), xaxt = "n", yaxt = "n", xlab = xlb, ylab = ylb, cex = cx, main = tl)
+  axis(1, ff(10^c(0:5)), 10^c(0:5))
+  axis(2, ff(10^c(0:5)), 10^c(0:5))
+  segments(ff(0), ff(0), ff(10^5), ff(10^5))
+  segments(ff(1), ff(1), ff(1), ff(10^5), col = grey(0.7))
+  segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
+
+  scatter100m.add(yy,gold,clr,ff,offset,cx)
+  if (lgn) {
+    legend("topleft", legend =  c("HRSL", "Landscan", "WorldPop"), col = col[c(7,5,3)],
+           lty = 1, lwd = 2, cex = 1, bg = "white", box.col = "white")
+  }
+}
+
+scatter100m.add <- function(yy, gold = ddpop100, clr = gry, ff = ff1, offset = 0, cx = .7) {
+  points(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, cex = cx) 
+}
+```
+
+```{r, fig.height=6, fig.width=6}
+wpclr <- col[3]
+gry <- grey(0.8)
+
+scatter1kFigure <- function() {
+  cxx <- .5
+  par(mfrow = c(3,2), mar = c(5,4.2,3,2))
+  scatter1k(popk$lspop, cx = cxx, lgn = TRUE, tl = "A")
+  scatter1k.add(popk$popfb, cid = 7, cx = cxx)
+  scatter1k.add(popk$wppop, cid = 3, cx = cxx)
+  scatter100m.add(ddwppop, clr = wpclr, cx = cxx/2)
+  scatter100m.add(ddpopfb, clr = fbclr, cx = cxx/2)
+  scatter1k(popk$lspop,cx = cxx, tl = "B) Landscan")
+  scatter1k(popk$popfb, cid = 7,cx = cxx, tl = "C) HRSL", lgn=FALSE)
+  scatter100m.add(ddpopfb, clr = gry, cx = cxx/2)
+  scatter1k.add(popk$popfb, cid = 7,cx = cxx)
+  scatter1k(popk$wppop, cid = 3,cx = cxx, tl = "D) WorldPOP")
+  scatter100m.add(ddwppop, clr = gry, cx = cxx/2)
+  scatter1k.add(popk$wppop, cid = 3, cx = cxx)
+  scatter100m(popm$popfb, gold=popm$pop100,
+              xlb = "BIMEP 100x100 m", ylb = "Population Size",
+              clr = fbclr,cx = cxx/2, tl = "E) HRSL, 100x100 m")
+  scatter100m(popm$wppop, gold = popm$pop100,
+              xlb = "BIMEP 100x100 m", ylb = "Population Size",
+              clr = wpclr, cx = cxx/2, tl = "F) WP, 100x100 m")
+}
+
+
+scatter1kFigure() 
+
+#points(ff(popk$pop1k), ff(popk$popfb), col = col[7], pch = 15)
+#points(ff(popk$pop1k), ff(popk$wppop), col = col[3], pch = 17)
+
+```

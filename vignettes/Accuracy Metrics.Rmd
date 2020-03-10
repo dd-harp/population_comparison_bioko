@@ -105,7 +105,7 @@ if (!exists("popd")) {
   popd <- sapply(1:194090, getPD)
 }
 
-dpop100 <- ddpop100 = popd[1,]
+dpop100 <- ddpop100 <- popd[1,]
 ix <- which(sectors$pop100 == 0)
 ddpop100[ix] <- 0 
 dwppop = ddwppop <- popd[2,]
@@ -1168,7 +1168,7 @@ popk$fbpopp <- popk$popfb / fbpoptot
 
 ##### BUILD THE 5KM GRID
 
-km5 <- read.csv("5x5grid.csv", sep = ",")
+km5 <- read.csv(fs::path(params$source_data, "5x5grid.csv"), sep = ",")
 x <- c("areaId", "fiveId")
 names(km5) <- x
 
@@ -1186,7 +1186,7 @@ popk <- merge(popk, list(
 
 ##### BUILD THE ADMIN4 LAYER
 
-ad4 <- read.csv("AreaByComm.csv", sep = ",")
+ad4 <- read.csv(fs::path(params$source_data, "AreaByComm.csv"), sep = ",")
 x <- c("areaId", "admin4", "admin4Id")
 names(ad4) <- x
 ad4_2 <- read.csv("AreaByNPad4.csv", sep = ",") ### missed points due to National Parks, except for 3 (areaId 94, 1025 and 2136)
@@ -1213,7 +1213,7 @@ popk <- merge(popk, list(
 
 ##### BUILD THE ADMIN2 LAYER
 
-ad2 <- read.csv("AreaByDistrict.csv", sep = ",")
+ad2 <- read.csv(fs::path(params$source_data, "AreaByDistrict.csv"), sep = ",")
 x <- c("areaId", "admin2", "admin2Id", "admin2type")
 names(ad2) <- x
 
