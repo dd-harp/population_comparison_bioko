@@ -172,8 +172,9 @@ if (!dir.exists(raster_dir)) {
 for (map_idx in 1:nrow(files_df)) {
   filename <- fs::path(raster_dir, files_df[map_idx, "filename"])
   if (!file.exists(filename)) {
-    proj_raster <- raster::projectRaster(maps[[map_idx]], crs = utm_projection)
-    # Projection uses bilinear interpolation, which can cause negative values.
+    # or method = "ngb" for nearest-neighbor
+    proj_raster <- raster::projectRaster(maps[[map_idx]], crs = utm_projection, method = "bilinear")
+    # Bilinear interpolation, which can cause negative values.
     proj_raster <- raster::clamp(proj_raster, lower = 0)
     pop_density_im <- population_count_estimator(proj_raster)
     pop_density_raster <- im_to_raster(pop_density_im, utm_projection)

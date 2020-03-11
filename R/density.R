@@ -14,8 +14,37 @@ population_count_estimator <- function(projected_raster) {
   pop_raster_im <- maptools::as.im.RasterLayer(projected_raster)
   point_pattern <- spatstat::rpoint(raster_sum, pop_raster_im)
   stopifnot(point_pattern$n == raster_sum)
-  density <- spatstat::density.ppp(point_pattern, sigma = spatstat::bw.diggle)
+  density <- spatstat::density.ppp(
+    point_pattern,
+    sigma = spatstat::bw.diggle,
+    dimyx = c(raster::ncol(projected_raster), raster::nrow(projected_raster))
+    )
   density * raster_sum / sum(density)
+}
+
+
+#' Estimate density of population using density estimator on the image.
+#'
+#' This takes the original grid of populations and turns it into
+#' a point pattern with point point per cell, but each point has
+#' a mark that is the value of the cell.
+#'
+#' @param projected_raster A raster in projected coordinates.
+#' @return A list with a density raster and `m2_per_pixel`, which
+#'   is square meters per pixel.
+#' @export
+population_density_estimator <- function(projected_raster) {
+  pop_raster_im <- maptools::as.im.RasterLayer(projected_raster)
+  window <- spatstat::Window(pop_raster_im)
+  xy <- spatstat::raster.xy(window, drop = TRUE)
+  point_pattern <- spatstat::ppp(x = xy$x, y = xy$y, window = window)
+  density <- spatstat::density.ppp(
+    point_pattern,
+    sigma = spatstat::bw.diggle,
+    dimyx = dim(pop_raster_im),
+    weights = pop_raster_im
+  )
+  density
 }
 
 
