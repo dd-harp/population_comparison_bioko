@@ -153,6 +153,98 @@ ls1km_density <- urban_fraction_by_point_density(pop_raster, utm_projection, 150
 ls1km_density
 ```
 
+```{r projected_area}
+projected_area <- function(projected_raster) {
+  abs(
+    (raster::xFromCol(projected_raster, 2) - raster::xFromCol(projected_raster, 1)) *
+    (raster::yFromRow(projected_raster, 2) - raster::yFromRow(projected_raster, 1))
+    )
+}
+```
+
+
+```{r}
+projected_raster <- proj_raster
+c(nrow(proj_raster), ncol(proj_raster))
+pop_raster_im <- maptools::as.im.RasterLayer(projected_raster)
+window <- spatstat::Window(pop_raster_im)
+include <- as.logical(as.matrix(window))
+xy <- spatstat::raster.xy(window, drop = TRUE)
+point_pattern <- spatstat::ppp(x = xy$x, y = xy$y, window = window)
+density <- spatstat::density.ppp(
+  point_pattern,
+  sigma = spatstat::bw.diggle,
+  dimyx = dim(pop_raster_im)[c(2, 1)],
+  weights = pop_raster_im
+)
+density
+
+```
+
+
+```{r test_kernel_blur}
+dims <- c(20, 50)  # row, column
+range <- c(5000, 2000)  # width, height
+to_coord <- function(range, dim) {
+  nn <- 0:dim * range / dim
+  0.5 * (nn[1:length(nn) - 1] + nn[2:length(nn)])
+}
+xvals <- to_coord(range[1], dims[1])
+yvals <- to_coord(range[2], dims[2])
+mat <- matrix(0.01, nrow = dims[1], ncol = dims[2])
+mat[, 1:(dims[2]/2)] <- 0.04
+
+fake_im <- spatstat::im(mat, xrange = c(0, range[1]), yrange = c(0, range[2]))
+blurred <- spatstat::blur(fake_im, sigma = sqrt(10^6 / pi), kernel = "disc", normalise = TRUE)
+strip <- blurred[dims[1] %/% 2, ]
+left <- yvals[min(which(strip < 0.0399))]
+right <- yvals[max(which(strip > 0.0101))]
+right - left
+```
+
+How do we make a hard kernel estimate of density? This kind of smoothing
+is sometimes called blur. It means we average over all values within
+a disc. There is a function to do this in spatstat, but it isn't clear
+about what the parameters mean when you aren't using a Gaussian kernel.
+The surprising result is that the sigma parameter for spatstat's blur
+function is half of the radius of the resulting disc kernel.
+If you set sigma to 100, you get a radius of 200.
+```{r test_kernel_blur}
+dims <- c(1000, 1000)  # row, column
+range <- c(2000, 2000)  # width, height
+to_coord <- function(range, dim) {
+  nn <- 0:dim * range / dim
+  0.5 * (nn[1:length(nn) - 1] + nn[2:length(nn)])
+}
+xvals <- to_coord(range[1], dims[2])
+yvals <- to_coord(range[2], dims[1])
+pixel_area <- (xvals[2] - xvals[1]) * (yvals[2] - yvals[1])
+mat <- matrix(0.00, nrow = dims[1], ncol = dims[2])
+peak_value <- 50
+mat[dims[1] %/% 2, dims[2] %/% 2] <- peak_value
+
+fake_im <- spatstat::im(mat, xrange = c(0, range[1]), yrange = c(0, range[2]))
+sigma <- 0.5 * sqrt(10^6 / pi)
+blurred <- spatstat::blur(fake_im, sigma = sigma, kernel = "disc", normalise = FALSE)
+strip <- c(blurred[dims[1] %/% 2, ])
+bmax <- 0.5 * max(blurred)
+left <- xvals[min(which(strip > bmax))]
+right <- xvals[max(which(strip > bmax))]
+radius_limit <- 0.5 * (right - left)
+density_prediction <- sqrt(peak_value * pixel_area / pi / max(blurred))
+
+diff_by_radius <- function(sigma) {
+  blurred <- spatstat::blur(fake_im, sigma = sigma, kernel = "disc", normalise = FALSE)
+  strip <- blurred[dims[1] %/% 2, ]
+  bmax <- 0.5 * max(blurred)
+  left <- xvals[min(which(strip > bmax))]
+  right <- xvals[max(which(strip > bmax))]
+  # abs(2 * 10^3 / sqrt(pi) - (right - left))
+  200 - sqrt(peak_value * pixel_area / pi / max(blurred))
+}
+#opt <- optim(150, diff_by_radius)
+c(radius_limit, density_prediction)
+```
 
 Landscan measures people in thousands, so urban is pixels
 above `r 1500 / (10^3)^2 / 1000`. The population density is
