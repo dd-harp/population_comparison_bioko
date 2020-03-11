@@ -48,6 +48,25 @@ population_density_estimator <- function(projected_raster) {
 }
 
 
+#' Find the average density within a 1 square km disc around each pixel
+#'
+#' Given a raster that is projected to a grid measured in meters,
+#' take each pixel and average its values with all pixels within
+#' a disc that is 1 square kilometer in area.
+#'
+#' @param projected_raster a raster::raster that is projected to
+#'   have meters as units.
+#' @return A raster::raster that is similarly projected but now smoothed.
+#' @export
+density_from_disc <- function(projected_raster) {
+  raster_im <- maptools::as.im.RasterLayer(projected_raster)
+  # sigma is half of the radius of a circle with 1 km^2 area.
+  sigma <- 0.5 * sqrt(10^6 / pi)
+  smoothed <- spatstat::blur(raster_im, sigma = sigma, kernel = "disc", normalise = FALSE)
+  raster::raster(maptools::as.SpatialGridDataFrame.im(smoothed))
+}
+
+
 
 #' Calculate square meters per pixel for a spatstat im
 #'

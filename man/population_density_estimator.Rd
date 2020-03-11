@@ -14,7 +14,7 @@ A list with a density raster and `m2_per_pixel`, which
   is square meters per pixel.
 }
 \description{
-This takes a grid of population in latitude and longitude
-and turns it into a point per person in order to estimate
-the density of people.
+This takes the original grid of populations and turns it into
+a point pattern with point point per cell, but each point has
+a mark that is the value of the cell.
 }
