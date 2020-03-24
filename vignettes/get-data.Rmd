@@ -155,7 +155,7 @@ aggregate_and_write <- function(raster, name) {
   pixel_area <- square_meters_per_pixel.raster(raster)
   desired_area <- 10^6
   fact <- round(sqrt(desired_area / pixel_area))
-  cat(paste("aggregating factor for", name, "is", fact, "\n"))
+  cat(paste("aggregating factor for", name, "is", fact, "with pixel side", sqrt(pixel_area), "\n"))
   aggregated <- raster::aggregate(raster, fact = fact, fun = sum, expand = TRUE)
   popbioko::write_aligned_raster(
     aggregated,
@@ -216,9 +216,9 @@ popbioko::write_aligned_raster(
 WorldPop is 100m, like the HRSL data, so we aggregate it.
 
 ```{r worldpop_to_grid}
-wp_options <- list(raw = "GNQ15v2.tif", un_adjusted = "GNQ15adjv2.tif")
+wp_options <- list(raw = "GNQ15v2.tif", adjusted = "GNQ15adjv2.tif")
 worldpop <- raster::raster(fs::path(
-  data_dir, "Equatorial_Guinea_100m_Population", wp_options[["un_adjusted"]]))
+  data_dir, "Equatorial_Guinea_100m_Population", wp_options[["adjusted"]]))
 worldpop <- raster::crop(worldpop, bioko_sf, snap = "out")
 worldpop_id <- list(source = "WorldPop", grid = "WorldPop", resolution = 100)
 bimep_id <- worldpop_id

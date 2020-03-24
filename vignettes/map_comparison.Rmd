@@ -202,7 +202,7 @@ for (map_idx in 1:nrow(files_df)) {
 The density maps are saved as GeoTIFFs in the `density_raster` subdirectory,
 so load them here before making the summary table.
 ```{r load_densities}
-density <- lapply(files_df$filename, function(x) raster::raster(fs::path(density_dir, x)))
+density <- lapply(files_df$filename, function(x) raster::raster(fs::path(kde_dir, x)))
 names(density) <- names(maps)
 ```
 
