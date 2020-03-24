@@ -153,7 +153,6 @@ ls1km_density <- urban_fraction_by_point_density(pop_raster, utm_projection, 150
 ls1km_density
 ```
 
-
 Landscan measures people in thousands, so urban is pixels
 above `r 1500 / (10^3)^2 / 1000`. The population density is
 on a map in meters, so let's count the pixel size in square meters.
@@ -165,15 +164,16 @@ of approximation through most of our work. This step is less sensitive
 to interpolation because it will construct point process models during
 the `population_count_estimator`.
 ```{r make_population_maps}
-raster_dir <- fs::path(params$data_directory, "density_raster")
-if (!dir.exists(raster_dir)) {
-  dir.create(raster_dir)
+kde_dir <- fs::path(params$data_directory, "kde_raster")
+if (!dir.exists(kde_dir)) {
+  dir.create(kde_dir)
 }
 for (map_idx in 1:nrow(files_df)) {
-  filename <- fs::path(raster_dir, files_df[map_idx, "filename"])
+  filename <- fs::path(kde_dir, files_df[map_idx, "filename"])
   if (!file.exists(filename)) {
-    proj_raster <- raster::projectRaster(maps[[map_idx]], crs = utm_projection)
-    # Projection uses bilinear interpolation, which can cause negative values.
+    # or method = "ngb" for nearest-neighbor
+    proj_raster <- raster::projectRaster(maps[[map_idx]], crs = utm_projection, method = "bilinear")
+    # Bilinear interpolation, which can cause negative values.
     proj_raster <- raster::clamp(proj_raster, lower = 0)
     pop_density_im <- population_count_estimator(proj_raster)
     pop_density_raster <- im_to_raster(pop_density_im, utm_projection)
@@ -182,10 +182,27 @@ for (map_idx in 1:nrow(files_df)) {
 }
 ```
 
+This makes density maps in a way that's very clear. For each pixel,
+it averages density within a circular, 1 square km neighborhood.
+```{r make_density_maps}
+density_dir <- fs::path(params$data_directory, "density_raster")
+if (!dir.exists(density_dir)) {
+  dir.create(density_dir)
+}
+for (map_idx in 1:nrow(files_df)) {
+  filename <- fs::path(density_dir, files_df[map_idx, "filename"])
+  if (!file.exists(filename)) {
+    # or method = "ngb" for nearest-neighbor
+    proj_raster <- raster::projectRaster(maps[[map_idx]], crs = utm_projection, method = "ngb")
+    pop_density_raster <- density_from_disc(proj_raster)
+    raster::writeRaster(pop_density_raster, filename = filename, format = "GTiff")
+  }
+}
+```
 The density maps are saved as GeoTIFFs in the `density_raster` subdirectory,
 so load them here before making the summary table.
 ```{r load_densities}
-density <- lapply(files_df$filename, function(x) raster::raster(fs::path(raster_dir, x)))
+density <- lapply(files_df$filename, function(x) raster::raster(fs::path(kde_dir, x)))
 names(density) <- names(maps)
 ```
 
@@ -315,7 +332,16 @@ as.data.frame(t(show1500_df[show1500_df$resolution == 1000, ]))
   bound for empty. Should I make a graph of how different
   datasets get close to zero? It's a problem for both WorldPop
   and LandScan.
-
+- The HRSL is 30m, not 100m. Make sure it's aggregated correctly to 1km.
+- WorldPop has a large population. They provide an unscaled and a
+  scaled version. Check which one we're using, what year it's supposed
+  to be, and try the other one.
+- The 1km data behaves like a smooth grid. The 100m and 30m data
+  behave like points. I see that b/c the point smoothing makes
+  a big difference on the urban numbers. At what resolution do we
+  treat this data as point data?
+- Using a kernel density estimator gives the largest estimate for
+  urban. The 1 km^2 disc seems to give the smallest.
 
 # Population Scatter Plots
 
@@ -363,7 +389,7 @@ map_from_source_resolution <- function(source, resolution, map_list) {
 xy_from_source_resolution <- function(source, resolution) {
   map_from_source_resolution(source, resolution, maps)
 }
-  
+
 
 density_from_source_resolution <- function(source, resolution) {
   map_from_source_resolution(source, resolution, density)
@@ -371,32 +397,29 @@ density_from_source_resolution <- function(source, resolution) {
 
 
 pop_scatter <- function(y_name, resolution, labels, title, maximum, background = NULL) {
+  plot(
+    vector(mode = "numeric", length = 0),
+    xlim = c(0, maximum), ylim = c(0, maximum),
+    xlab = labels[[1]], ylab = labels[[2]], main = title,
+    xaxt = "n", yaxt = "n"
+    )
+  axis(1, logoff(10^c(0:5)), 10^c(0:5))
+  axis(2, logoff(10^c(0:5)), 10^c(0:5))
+  segments(logoff(0), logoff(0), logoff(10^5), logoff(10^5))
+  segments(logoff(1), logoff(1), logoff(1), logoff(10^5), col = colors["grey"])
+  segments(logoff(1), logoff(1), logoff(10^5), logoff(1), col = colors["grey"])
+
   for (plot_idx in 1:length(y_name)) {
     y_source <- y_name[plot_idx]
     y_resolution <- resolution[plot_idx]
-    xy <- xy_from_source_resolution(y_source, y_resolution)
+    xy <- density_from_source_resolution(y_source, y_resolution)
     cex <- symbol_size[as.character(y_resolution)]
     pch <- symbol_choice[as.character(y_resolution)]
     color <- colors[y_source]
     if (!is.null(background) & plot_idx %in% background) {
       color <- colors["grey"]
     }
-    if (plot_idx == 1) {
-      plot(
-        xy, col = color, cex = cex, pch = pch,
-        xlim = c(0, maximum), ylim = c(0, maximum),
-        xlab = labels[[1]], ylab = labels[[2]], main = title,
-        xaxt = "n", yaxt = "n"
-        )
-      axis(1, logoff(10^c(0:5)), 10^c(0:5))
-      axis(2, logoff(10^c(0:5)), 10^c(0:5))
-      segments(logoff(0), logoff(0), logoff(10^5), logoff(10^5))
-      segments(logoff(1), logoff(1), logoff(1), logoff(10^5), col = colors["grey"])
-      segments(logoff(1), logoff(1), logoff(10^5), logoff(1), col = colors["grey"])
-
-    } else {
-      points(xy, col = color, cex = cex, pch = pch)
-    }
+    points(xy, col = color, cex = cex, pch = pch)
   }
 }
 ```
@@ -430,94 +453,3 @@ pop_scatter(
   density_label, "D) WorldPop", maximum1k, background = 1)
 ```
 
-
-```{r}
-ff1 <- function(x,offset=0) {
-  log(1 + x + offset)
-  }
-
-scatter1k.add <- function(yy, cid = 5, ff = ff1, offset = 0, cx = .7) {
-  points(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19, cex = cx) 
-}
-
-scatter1k <- function(
-  yy, cid = 5, ff = ff1, offset = 0, cx = .7,
-  lgn = FALSE, tl = "", xlb = "BIMEP Population Density"
-  )
-  {
-  mx <- max(popk$lspop) * 1.01
-  plot(ff(popk$pop1k,offset), ff(yy,offset), col = col[cid], pch = 19,
-       xlim = ff(c(0,mx)), ylim = ff(c(0,mx)), xaxt = "n", yaxt = "n",
-       xlab = xlb, ylab = "Mapped Population Density", cex = cx, main = tl)
-  axis(1, ff(10^c(0:5)), 10^c(0:5))
-  axis(2, ff(10^c(0:5)), 10^c(0:5))
-  segments(ff(0), ff(0), ff(10^5), ff(10^5))
-  segments(ff(1), ff(1), ff(1), ff(10^5), col = grey(0.7))
-  segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
-  scatter1k.add(yy,cid,ff,offset,cx)
-  if (lgn) {
-    legend("topleft", legend =  c("HRSL", "Landscan", "WorldPop"), col = col[c(7,5,3)],
-           lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
-  }
-}
-
-scatter100m <- function(
-  yy, gold = ddpop100, clr = gry, ff = ff1, offset = 0, cx = .7,
-  lgn = FALSE, tl = "", xlb = "BIMEP Population Density", ylb = "Population Density"
-  )
-  {
-  mx <- max(gold)*1.01
-  plot(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, xlim = ff(c(0,mx)),
-       ylim = ff(c(0,mx)), xaxt = "n", yaxt = "n", xlab = xlb, ylab = ylb, cex = cx, main = tl)
-  axis(1, ff(10^c(0:5)), 10^c(0:5))
-  axis(2, ff(10^c(0:5)), 10^c(0:5))
-  segments(ff(0), ff(0), ff(10^5), ff(10^5))
-  segments(ff(1), ff(1), ff(1), ff(10^5), col = grey(0.7))
-  segments(ff(1), ff(1), ff(10^5), ff(1), col = grey(0.7))
-
-  scatter100m.add(yy,gold,clr,ff,offset,cx)
-  if (lgn) {
-    legend("topleft", legend =  c("HRSL", "Landscan", "WorldPop"), col = col[c(7,5,3)],
-           lty = 1, lwd = 2, cex = 1, bg = "white", box.col = "white")
-  }
-}
-
-scatter100m.add <- function(yy, gold = ddpop100, clr = gry, ff = ff1, offset = 0, cx = .7) {
-  points(ff(gold,offset), ff(yy,offset), col = clr, pch = 15, cex = cx) 
-}
-```
-
-```{r, fig.height=6, fig.width=6}
-wpclr <- col[3]
-gry <- grey(0.8)
-
-scatter1kFigure <- function() {
-  cxx <- .5
-  par(mfrow = c(3,2), mar = c(5,4.2,3,2))
-  scatter1k(popk$lspop, cx = cxx, lgn = TRUE, tl = "A")
-  scatter1k.add(popk$popfb, cid = 7, cx = cxx)
-  scatter1k.add(popk$wppop, cid = 3, cx = cxx)
-  scatter100m.add(ddwppop, clr = wpclr, cx = cxx/2)
-  scatter100m.add(ddpopfb, clr = fbclr, cx = cxx/2)
-  scatter1k(popk$lspop,cx = cxx, tl = "B) Landscan")
-  scatter1k(popk$popfb, cid = 7,cx = cxx, tl = "C) HRSL", lgn=FALSE)
-  scatter100m.add(ddpopfb, clr = gry, cx = cxx/2)
-  scatter1k.add(popk$popfb, cid = 7,cx = cxx)
-  scatter1k(popk$wppop, cid = 3,cx = cxx, tl = "D) WorldPOP")
-  scatter100m.add(ddwppop, clr = gry, cx = cxx/2)
-  scatter1k.add(popk$wppop, cid = 3, cx = cxx)
-  scatter100m(popm$popfb, gold=popm$pop100,
-              xlb = "BIMEP 100x100 m", ylb = "Population Size",
-              clr = fbclr,cx = cxx/2, tl = "E) HRSL, 100x100 m")
-  scatter100m(popm$wppop, gold = popm$pop100,
-              xlb = "BIMEP 100x100 m", ylb = "Population Size",
-              clr = wpclr, cx = cxx/2, tl = "F) WP, 100x100 m")
-}
-
-
-scatter1kFigure() 
-
-#points(ff(popk$pop1k), ff(popk$popfb), col = col[7], pch = 15)
-#points(ff(popk$pop1k), ff(popk$wppop), col = col[3], pch = 17)
-
-```
