@@ -195,12 +195,12 @@ write_aligned_raster <- function(layer, layer_id, local_directory = "inst/extdat
   if (!dir.exists(aligned)) {
     fs::dir_create(aligned, recurse = TRUE)
   }
+  resolution <- ifelse(layer_id$resolution < 800, "fine", "coarse")
   filename <- paste(
     layer_id$grid,
-    layer_id$resolution,
-    "_",
+    resolution,
     layer_id$source,
-    sep = ""
+    sep = "_"
   )
   layer_path <- fs::path(aligned, filename, ext = "tif")
   if (file.exists(layer_path)) {
@@ -232,23 +232,10 @@ filenames_to_description <- function(filenames) {
   for (file_idx in 1:length(filenames)) {
     filename <- filenames[file_idx]
     splitted <- strsplit(filename, "[_.]")[[1]]
-    grid_with_resolution <- splitted[1]
-    source <- splitted[2]
-    match <- regexpr("[0-9]+", grid_with_resolution)
-    if (match >= 0) {
-      grid <- substr(grid_with_resolution, 1, match - 1)
-      resolution <- as.integer(substr(
-        grid_with_resolution, match, match + attr(match, "match.length")))
-    } else {
-      stop(paste("Cannot match filename", filename))
-    }
-    if (resolution == 100) {
-      full_name <- paste(source, "on", grid, "100m")
-    } else if (resolution == 1000) {
-      full_name <- paste(source, "on", grid, "1km")
-    } else {
-      stop("unknown resolution")
-    }
+    grid <- splitted[1]
+    resolution <- splitted[2]
+    source <- splitted[3]
+    full_name <- paste(source, "on", grid, resolution)
     description_df[file_idx, ] <- list(filename, full_name, resolution, source, grid)
   }
   rownames(description_df) <- description_df$name

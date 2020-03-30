@@ -40,6 +40,7 @@ The maps were made by the "get-data" vignette. We load them all
 at once here for convenience. The naming scheme is dataset-on-grid,
 where grids are 100m or 1km, according to where they come from.
 
+These maps are estimates of the number of people in each pixel.
 
 ```{r load_maps}
 data_dir <- params$data_directory
@@ -118,7 +119,7 @@ for statistics, and it will use the `proj4` package
 to project the points from latitude-longitude to UTM.
 
 ```{r baseline_expectations_pop}
-pop_raster <- maps[["LandScan on LandScan 1km"]]
+pop_raster <- maps[["LandScan on LandScan coarse"]]
 sum(raster::values(pop_raster) > 1500, na.rm = TRUE) / nrow(pop_raster) / ncol(pop_raster)
 ```
 
@@ -146,12 +147,6 @@ bioko_proj_polygon_sp <- as(bioko_proj_sp, "SpatialPolygons")
 bioko_owin <- as.owin(bioko_proj_polygon_sp)
 ```
 
-
-```{r compute_density, eval = FALSE}
-pop_raster <- maps[["LandScan on LandScan 1km"]]
-ls1km_density <- urban_fraction_by_point_density(pop_raster, utm_projection, 1500)
-ls1km_density
-```
 
 Landscan measures people in thousands, so urban is pixels
 above `r 1500 / (10^3)^2 / 1000`. The population density is
@@ -244,14 +239,15 @@ for_show <- function(summary_df) {
   data.frame(
     source = summary_df$source,
     grid = summary_df$grid,
-    resolution = as.character(summary_df$resolution),
+    resolution = as.character(sprintf("%.1f", summary_df$side_meters)),
     total = sprintf("%.0f", summary_df$total),
     maximum = sprintf("%.0f", summary_df$maximum),
     empty_percent = sprintf("%.4g", summary_df$empty_percent),
     na_percent = sprintf("%.4g", summary_df$na_percent),
     urban_raw = sprintf("%.4g", urban_raw_percent),
     urban_fit = sprintf("%.4g", urban_percent),
-    pareto_fraction = sprintf("%.4g", 100 * as.numeric(summary_df$pareto_fraction))
+    pareto_fraction = sprintf("%.4g", 100 * as.numeric(summary_df$pareto_fraction)),
+    stringsAsFactors = FALSE
   )
 }
 show1000_df <- for_show(summary1000_df)
@@ -310,11 +306,11 @@ as.data.frame(t(show1500_df[show1500_df$grid == "LandScan", ]))
 ### Compare across resolutions
 This groups data with the same resolution.
 ```{r}
-as.data.frame(t(show1500_df[show1500_df$resolution == 100, ]))
+as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) < 500, ]))
 ```
 
 ```{r}
-as.data.frame(t(show1500_df[show1500_df$resolution == 1000, ]))
+as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) > 500, ]))
 ```
 
 ## Discussion
@@ -370,9 +366,9 @@ log_offset <- function(offset) {
 ```{r plot_all_together}
 logoff <- log_offset(1)
 symbol_size <- c(0.5, 0.25)
-names(symbol_size) <- c("1000", "100")
+names(symbol_size) <- c("coarse", "fine")
 symbol_choice <- c(19, 15)
-names(symbol_choice) <- c("1000", "100")
+names(symbol_choice) <- c("coarse", "fine")
 
 
 map_from_source_resolution <- function(source, resolution, map_list) {
@@ -426,10 +422,10 @@ pop_scatter <- function(y_name, resolution, labels, title, maximum, background =
 
 ```{r all_together}
 density_label <- c("BIMEP Population Density", "Mapped Population Density")
-maximum1k <- 1.01 * max(xy_from_source_resolution("LandScan", 1000)$y, na.rm = TRUE)
+maximum1k <- 1.01 * max(xy_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
 the_three <- c("HRSL", "LandScan", "WorldPop")
 pop_scatter(
-  c(the_three, "HRSL", "WorldPop"), c(rep(1000, 3), rep(100, 2)),
+  c(the_three, "HRSL", "WorldPop"), c(rep("coarse", 3), rep("fine", 2)),
   density_label, "A", maximum1k)
 legend("topleft", legend =  the_three, col = colors[the_three],
            lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
@@ -437,19 +433,19 @@ legend("topleft", legend =  the_three, col = colors[the_three],
 
 ```{r plot_landscan_density}
 pop_scatter(
-  "LandScan", 1000,
+  "LandScan", "coarse",
   density_label, "B) LandScan", maximum1k)
 ```
 
 ```{r plot_hrsl_density}
 pop_scatter(
-  rep("HRSL", 2), c(100, 1000),
+  rep("HRSL", 2), c("fine", "coarse"),
   density_label, "C) HRSL", maximum1k, background = 1)
 ```
 
 ```{r plot_woldpop_density}
 pop_scatter(
-  rep("WorldPop", 2), c(100, 1000),
+  rep("WorldPop", 2), c("fine", "coarse"),
   density_label, "D) WorldPop", maximum1k, background = 1)
 ```
 

@@ -125,6 +125,7 @@ summary_statistics <- function(population, density, urban_per_kilometer_sq) {
   fit_urban <- urban_fraction(density, urban_per_kilometer_sq)
   list(
     total = sum(population_array, na.rm = TRUE),
+    side_meters = sqrt(pixel_size_km * 10^6),
     maximum = max(population_array, na.rm = TRUE),
     empty_percent = 100 * sum(population_array < zero_cutoff, na.rm = TRUE) / sum(!is.na(population_array)),
     # Use the fit values for pareto fraction so they are more stable.

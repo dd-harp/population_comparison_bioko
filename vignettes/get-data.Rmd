@@ -136,15 +136,15 @@ Now put Bioko data on that grid:
 bimep_on_hrsl <- bimep_on_grid(hrsl_raster_zero, bioko_sf, local_directory = data_dir)
 plot(bimep_on_hrsl)
 ```
-```{r write_100m_hrsl}
+```{r write_30m_hrsl}
 popbioko::write_aligned_raster(
   hrsl_raster_zero,
-  list(source = "HRSL", grid = "HRSL", resolution = 100),
+  list(source = "HRSL", grid = "HRSL", resolution = 30),
   local_directory = data_dir
 )
 popbioko::write_aligned_raster(
   bimep_on_hrsl,
-  list(source = "BIMEP", grid = "HRSL", resolution = 100),
+  list(source = "BIMEP", grid = "HRSL", resolution = 30),
   local_directory = data_dir
 )
 ```
@@ -157,18 +157,19 @@ aggregate_and_write <- function(raster, name) {
   fact <- round(sqrt(desired_area / pixel_area))
   cat(paste("aggregating factor for", name, "is", fact, "with pixel side", sqrt(pixel_area), "\n"))
   aggregated <- raster::aggregate(raster, fact = fact, fun = sum, expand = TRUE)
+  agg_pixel_side <- sqrt(square_meters_per_pixel.raster(aggregated))
   popbioko::write_aligned_raster(
     aggregated,
-    list(source = name$source, grid = name$grid, resolution = 10 * name$resolution),
+    list(source = name$source, grid = name$grid, resolution = agg_pixel_side),
     local_directory = data_dir)
 }
 aggregate_and_write(
   hrsl_raster_zero,
-  list(source = "HRSL", grid = "HRSL", resolution = 100)
+  list(source = "HRSL", grid = "HRSL", resolution = 30)
 )
 aggregate_and_write(
   bimep_on_hrsl,
-  list(source = "BIMEP", grid = "HRSL", resolution = 100)
+  list(source = "BIMEP", grid = "HRSL", resolution = 30)
 )
 ```
 
