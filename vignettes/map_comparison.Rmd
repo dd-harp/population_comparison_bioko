@@ -195,9 +195,10 @@ for (map_idx in 1:nrow(files_df)) {
 }
 ```
 The density maps are saved as GeoTIFFs in the `density_raster` subdirectory,
-so load them here before making the summary table.
+so load them here before making the summary table. *Loading from `density_dir` means
+we are using the disc.*
 ```{r load_densities}
-density <- lapply(files_df$filename, function(x) raster::raster(fs::path(kde_dir, x)))
+density <- lapply(files_df$filename, function(x) raster::raster(fs::path(density_dir, x)))
 names(density) <- names(maps)
 ```
 
@@ -448,4 +449,129 @@ pop_scatter(
   rep("WorldPop", 2), c("fine", "coarse"),
   density_label, "D) WorldPop", maximum1k, background = 1)
 ```
+
+# Cumulative Maps
+
+This section builds the cumulative maps in figure 5.
+
+
+```{r linear_from_source_resolution}
+linear_from_source_resolution <- function(source, resolution, map_list) {
+  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == source, ]
+  x_map_name <- xy_df[xy_df$source == "BIMEP", "name"]
+  y_map_name <- xy_df[xy_df$source == source, "name"]
+  x <- raster::getValues(map_list[[x_map_name]])
+  y <- raster::getValues(map_list[[y_map_name]])
+  list(x = x, y = y)
+}
+```
+
+
+
+```{r cumulative_area}
+cdfAreaLines <- function(H, source, resolution, linewidth = 2) {
+  H <- sort(H)
+  area <-  c(1:length(H)) / length(H)
+  lines(
+    area,
+    cumsum(H) / sum(H),
+    col = colors[source],
+    lwd = linewidth,
+    lty = ifelse(resolution == "coarse", 1, 2)
+    )
+}
+
+cdfAreaFigure <- function(llwd = 1, label = "") {
+  plot(
+    vector(mode = "numeric", length = 0),
+    xlim = c(0, 1), ylim = c(0, 1),
+    xlab =  "% Area", ylab =  "Proportion of Population",
+    main = label
+    )
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+  for (source in sources) {
+    for (resolution in c("coarse", "fine")) {
+      if (source == "BIMEP") {
+        data <- linear_from_source_resolution("HRSL", resolution, density)$x
+      } else {
+        data <- linear_from_source_resolution(source, resolution, density)$y
+      }
+      cdfAreaLines(data, source, resolution, linewidth = llwd)
+    }
+  }
+  legend("topleft", legend =  sources, col = colors[sources],
+         lty = 1, lwd = 2, cex = 1)
+}
+
+cdfAreaFigure(2)
+```
+
+```{r}
+cdfDens <- function(H, log_base) {
+  H <- sort(H)
+  mx <- ceiling(log(max(H), base = log_base))
+  #print(c(mx=mx,pw=pw))
+  #browser() 
+  c2 <- 1:mx
+  ixz <- which(H == 0)
+  Pz <- length(ixz)
+  for (i in c2) {
+    ix <- which(H < log_base^i) 
+    Pz <- c(Pz, sum(H[ix]))
+  }
+  pop <- c(0, log_base^c2)
+  cbind(pop, Pz)
+}
+
+
+logPopAreaLines <- function(H, source, resolution, log_base, linewidth = 2) {
+  dd <- cdfDens(H,log_base)[-1,]
+  P <- dd[,1]
+  H <- dd[,2]
+  l <- log10(max(H))
+  
+  lines(
+    P,
+    H / max(H),
+    col = colors[source],
+    lwd = linewidth,
+    lty = ifelse(resolution == "coarse", 1, 2)
+    )
+}
+
+
+logPopAreaFigure <- function(llwd = 1, log_base = 2, label = "") {
+  plot(
+    vector(mode = "numeric", length = 0),
+    log = "x",
+    xlim = c(1.05, 0.3 * 10^5),
+    ylim = c(0, 1),
+    xlab =  "log(Pop Dens)",
+    ylab =  "Proportion of Population",
+    xaxt = "n",
+    main = label
+    )
+
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+  log_max <- 0
+  for (source in sources) {
+    for (resolution in c("coarse", "fine")) {
+      if (source == "BIMEP") {
+        data <- linear_from_source_resolution("HRSL", resolution, density)$x
+      } else {
+        data <- linear_from_source_resolution(source, resolution, density)$y
+      }
+      log_max <- max(log_max, log10(max(data)))
+      logPopAreaLines(data, source, resolution, log_base, linewidth = llwd)
+    }
+  }
+  axis(1, 10^(0:(log_max + 1)) + 0.5, logarithmic_axis_labels[1:(log_max + 2)])
+  legend("topleft", legend =  sources, col = colors[sources],
+         lty = 1, lwd = 2, cex = 1)
+}
+
+logPopAreaFigure(2)
+```
+
+
 
