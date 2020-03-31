@@ -452,7 +452,8 @@ pop_scatter(
 
 # Cumulative Maps
 
-This section builds the cumulative maps in figure 5.
+This section builds the cumulative maps in figure 5. It separates the work into
+one part to generate x and y data and one part to decide axes and such for that data.
 
 
 ```{r linear_from_source_resolution}
@@ -463,6 +464,22 @@ linear_from_source_resolution <- function(source, resolution, map_list) {
   x <- raster::getValues(map_list[[x_map_name]])
   y <- raster::getValues(map_list[[y_map_name]])
   list(x = x, y = y)
+}
+
+sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+
+# This draws each line for the plots, taking care of color and line type.
+lines_for_datasets <- function(datasets, linewidth) {
+  for (data_idx in 1:length(datasets)) {
+    lines(
+      datasets[[data_idx]][["x"]],
+      datasets[[data_idx]][["y"]],
+      type = "l",
+      col = colors[datasets[[data_idx]][["source"]]],
+      lwd = linewidth,
+      lty = ifelse(datasets[[data_idx]][["resolution"]] == "coarse", 1, 2)
+      )
+  }
 }
 ```
 
@@ -573,5 +590,78 @@ logPopAreaFigure <- function(llwd = 1, log_base = 2, label = "") {
 logPopAreaFigure(2)
 ```
 
+Now the third part of Figure 5, a density plot that is just density, not cumulative.
+```{r density_bins}
+log_density <- function(H, base_power = 2) {
+  c2 <- ceiling(max(log(H[H > 0], base = base_power)))
+  ixz <- which(H <= 0)
+  upper <- 0
+  HH <- H[-ixz]
+  Pz <- length(ixz)
+  for (i in 1:c2) {
+    upper <- c(upper, base_power^(i - 1))
+    ix <- which(HH < base_power^(i - 1))
+    if (length(ix) > 0) {
+      Pz <- c(Pz, sum(HH[ix]))
+      HH <- HH[-ix]
+    } else {
+      Pz <- c(Pz, 0)
+    }
+  }
+  while (Pz[length(Pz)] == 0) {
+    Pz <- Pz[-length(Pz)]
+    upper <- upper[-length(Pz)]
+  }
+  cbind(round(Pz), upper)
+}
+
+single_test <- linear_from_source_resolution("LandScan", "coarse", density)$y
+dens_test <- log_density(single_test, base_power = 1.2)
+
+
+density_kernel_data <- function(base_power, offset = 0) {
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+  datasets <- vector(mode = "list", length = 2 * length(sources))
+  running_idx <- 1
+  for (source in sources) {
+    for (resolution in c("coarse", "fine")) {
+      if (source == "BIMEP") {
+        data <- linear_from_source_resolution("HRSL", resolution, density)$x
+      } else {
+        data <- linear_from_source_resolution(source, resolution, density)$y
+      }
+      D <- log_density(data, base_power)[-1, 1]
+      l <- length(D)
+      x <- base_power^c(c(1:(l + 1))) * base_power^offset
+      y <- c(D / sum(data), 0)
+      datasets[[running_idx]] <- list(source = source, resolution = resolution, x = x, y = y, l = l)
+      running_idx <- running_idx + 1
+    }
+  }
+  datasets
+}
+
+
+density_kernel_figure <- function(base_power, linewidth = 1, label = "") {
+  datasets <- density_kernel_data(base_power)
+  l = max(sapply(datasets, function(ds) ds$l))
+  plot(
+    vector(mode = "numeric", length = 0),
+    xaxt = "n",
+    log = "x",
+    xlim = c(5, base_power^(l + 2)),
+    ylim = c(0, 0.4),
+    xlab =  "% Area", ylab =  "Proportion of Population",
+    main = label
+    )
+  lines_for_datasets(datasets, linewidth)
+  L <- 4
+  axis(1, 10^(0:(L + 1)) + 0.5, logarithmic_axis_labels[1:(L + 2)])
+  legend("topleft", legend =  sources, col = colors[sources],
+         lty = 1, lwd = 2, cex = 1)
+}
+
+density_kernel_figure(1.2, 2, 3)
+```
 
 
