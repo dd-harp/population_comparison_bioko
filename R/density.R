@@ -59,13 +59,27 @@ population_density_estimator <- function(projected_raster) {
 #' @return A raster::raster that is similarly projected but now smoothed.
 #' @export
 density_from_disc <- function(projected_raster) {
-  raster_im <- maptools::as.im.RasterLayer(projected_raster)
-  # sigma is half of the radius of a circle with 1 km^2 area.
-  sigma <- 0.5 * sqrt(10^6 / pi)
-  smoothed <- spatstat::blur(raster_im, sigma = sigma, kernel = "disc", normalise = FALSE)
-  raster::raster(maptools::as.SpatialGridDataFrame.im(smoothed))
-}
 
+  blurring <- function(ras_ras) {
+    # sigma is half of the radius of a circle with 1 km^2 area.
+    sigma <- 0.5 * sqrt(10^6 / pi)
+    raster_im <- maptools::as.im.RasterLayer(ras_ras)
+    smoothed <- spatstat::blur(raster_im, sigma = sigma, kernel = "disc", normalise = FALSE)
+    raster::raster(maptools::as.SpatialGridDataFrame.im(smoothed))
+  }
+
+  density_raster <- blurring(projected_raster)
+
+  # Now account for NA values near the edges by blurring a matrix of ones.
+  ones_raster <- raster::setValues(raster::raster(projected_raster), 1)
+  ones_raster <- raster::mask(ones_raster, projected_raster)
+  ones_density <- blurring(ones_raster)
+
+  normalized <- density_raster / ones_density
+
+  # The blur command converted NA to 0, so set them back to NA.
+  raster::mask(normalized, projected_raster, maskvalue = NA)
+}
 
 
 #' Calculate square meters per pixel for a spatstat im
