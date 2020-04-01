@@ -48,6 +48,26 @@ population_density_estimator <- function(projected_raster) {
 }
 
 
+
+#' Averages over a hard disk with area 1 square kilometer.
+#'
+#' @param projected_raster a raster::raster
+#' @return a raster of blurred values, where NA have been converted to zero before the blur.
+average_raster_on_disc <- function(projected_raster) {
+  # sigma is half of the radius of a circle with 1 km^2 area.
+  sigma <- 0.5 * sqrt(10^6 / pi)
+  raster_im <- maptools::as.im.RasterLayer(projected_raster)
+  smoothed <- spatstat::blur(
+    raster_im,
+    sigma = sigma,
+    kernel = "disc",
+    normalise = TRUE,
+    bleed = FALSE
+    )
+  raster::raster(maptools::as.SpatialGridDataFrame.im(smoothed))
+}
+
+
 #' Find the average density within a 1 square km disc around each pixel
 #'
 #' Given a raster that is projected to a grid measured in meters,
@@ -59,26 +79,19 @@ population_density_estimator <- function(projected_raster) {
 #' @return A raster::raster that is similarly projected but now smoothed.
 #' @export
 density_from_disc <- function(projected_raster) {
-
-  blurring <- function(ras_ras) {
-    # sigma is half of the radius of a circle with 1 km^2 area.
-    sigma <- 0.5 * sqrt(10^6 / pi)
-    raster_im <- maptools::as.im.RasterLayer(ras_ras)
-    smoothed <- spatstat::blur(raster_im, sigma = sigma, kernel = "disc", normalise = FALSE)
-    raster::raster(maptools::as.SpatialGridDataFrame.im(smoothed))
-  }
-
-  density_raster <- blurring(projected_raster)
+  density_raster <- average_raster_on_disc(projected_raster)
 
   # Now account for NA values near the edges by blurring a matrix of ones.
-  ones_raster <- raster::setValues(raster::raster(projected_raster), 1)
-  ones_raster <- raster::mask(ones_raster, projected_raster)
-  ones_density <- blurring(ones_raster)
-
-  normalized <- density_raster / ones_density
-
-  # The blur command converted NA to 0, so set them back to NA.
-  raster::mask(normalized, projected_raster, maskvalue = NA)
+  # single_area <- square_meters_per_pixel.raster(projected_raster)
+  # ones_raster <- raster::setValues(raster::raster(projected_raster), single_area)
+  # ones_raster <- raster::mask(ones_raster, projected_raster)
+  # ones_density <- average_raster_on_disc(ones_raster)
+  #
+  # normalized <- density_raster / ones_density
+  #
+  # # The blur command converted NA to 0, so set them back to NA.
+  # raster::mask(normalized, projected_raster, maskvalue = NA)
+  density_raster
 }
 
 

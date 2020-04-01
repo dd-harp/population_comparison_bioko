@@ -23,7 +23,7 @@ test_that("density_from_disc average value correct for uniform population", {
   fake_raster <- raster::raster(maptools::as.SpatialGridDataFrame.im(fake_im))
   blurred <- density_from_disc(fake_raster)
 
-  blur_mat <- as.matrix(blurred)
+  blur_mat <- raster::as.matrix(blurred)
   observed_density <- blur_mat[dims[1] %/% 2, dims[2] %/% 2]
   one_percent <- 0.01
   expect_lt(relative_error(observed_density, expected_density), one_percent)
@@ -139,8 +139,9 @@ test_that("density_from_disc accounts for NA borders", {
   expect_lt(relative_error(pixel_area_covered, 0.5 * square_km), 5 * one_percent)
 
   # The values in that square kilometer add up to the single pixel in the center.
+  sum_values <- sum(raster::values(blurred), na.rm = TRUE)
   expect_lt(
-    relative_error(sum(raster::values(blurred), na.rm = TRUE), peak_value),
+    relative_error(sum_values, peak_value),
     one_percent
   )
 
