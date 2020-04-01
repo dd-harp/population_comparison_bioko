@@ -349,6 +349,7 @@ use the count of people in a pixel.
 
 Set up consistent colors for the different data sets.
 ```{r set_colors, echo=FALSE}
+sources_ordered <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
 colors <- c(viridis::plasma(8, alpha = 1, begin = 0, end = 1)[c(1, 3, 5, 7)], grey(0.7))
 names(colors) <- c("BIMEP", "WorldPop", "LandScan", "HRSL", "grey")
 
@@ -572,9 +573,8 @@ logPopAreaFigure <- function(llwd = 1, log_base = 2, label = "") {
     main = label
     )
 
-  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
   log_max <- 0
-  for (source in sources) {
+  for (source in sources_ordered) {
     for (resolution in c("coarse", "fine")) {
       if (source == "BIMEP") {
         data <- linear_from_source_resolution("HRSL", resolution, density)$x
@@ -624,10 +624,9 @@ dens_test <- log_density(single_test, base_power = 1.2)
 
 
 density_kernel_data <- function(base_power, offset = 0) {
-  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
   datasets <- vector(mode = "list", length = 2 * length(sources))
   running_idx <- 1
-  for (source in sources) {
+  for (source in sources_ordered) {
     for (resolution in c("coarse", "fine")) {
       if (source == "BIMEP") {
         data <- linear_from_source_resolution("HRSL", resolution, density)$x
@@ -637,7 +636,7 @@ density_kernel_data <- function(base_power, offset = 0) {
       D <- log_density(data, base_power)[-1, 1]
       l <- length(D)
       x <- base_power^c(c(1:(l + 1))) * base_power^offset
-      y <- c(D / sum(data), 0)
+      y <- c(D / sum(data, na.rm = TRUE), 0)
       datasets[[running_idx]] <- list(source = source, resolution = resolution, x = x, y = y, l = l)
       running_idx <- running_idx + 1
     }
@@ -665,7 +664,136 @@ density_kernel_figure <- function(base_power, linewidth = 1, label = "") {
          lty = 1, lwd = 2, cex = 1)
 }
 
-density_kernel_figure(1.2, 2, 3)
+density_kernel_figure(1.2, 2, "C")
 ```
 
+# Proportion, Accuracy, Recall, and Precision
+
+Figure 6 is proportion, accuracy, recall, and precision.
+
+
+## Proportion
+
+```{r}
+landAA <- function(H, breakpoints, area = 1) {
+  stopifnot(class(breakpoints) == "numeric")
+  breakpoints <- c(breakpoints, Inf) / area
+
+  Pz <- rep(0, length(breakpoints))
+  for (cut_idx in 1:length(breakpoints)) {
+    ixz <- which(H < breakpoints[cut_idx])
+    Pz[cut_idx] <- length(ixz)
+    if (Pz[cut_idx] > 0) {
+      H <- H[-ixz]
+    }  # Nothing to remove
+  }
+  Pz / sum(Pz)
+}
+
+over_arrays <- function(transform) {
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+  datasets <- vector(mode = "list", length = 2 * length(sources))
+  running_idx <- 1
+  for (source in sources) {
+    for (resolution in c("coarse", "fine")) {
+      if (source == "BIMEP") {
+        data <- linear_from_source_resolution("HRSL", resolution, density)$x
+      } else {
+        data <- linear_from_source_resolution(source, resolution, density)$y
+      }
+      datasets[[running_idx]] <- list(source = source, resolution = resolution, x = transform(data))
+      running_idx <- running_idx + 1
+    }
+  }
+  datasets
+}
+
+proportion_data <- function(breakpoints) {
+  over_arrays(function(data) {
+    landAA(data, breakpoints)
+  })
+}
+example_data <- proportion_data(c(1, 50, 250, 1000))
+```
+
+
+```{r}
+breakpoints <- c(
+  rural0 = 1,
+  rural1 = 50,
+  rural2 = 250,
+  urban = 1000
+)
+break_colors <- c(
+  empty = grey(0.95),
+  rural0 = "ivory",
+  rural1 = "lavender",
+  rural2 = "cornsilk",
+  urban = "aliceblue"
+)
+
+pdfAreaFigure <- function(lb = "") {
+  prop_data <- proportion_data(breakpoints)
+  plot(
+    vector(mode = "numeric", length = 0),
+    xlim = c(1, 7),
+    ylim = c(0, 1),
+    xaxt = "n",
+    xlab = "",
+    ylab = "Proportion",
+    main = ""
+    )
+  axis(1, c(2, 2:5 + 0.5), c(0,1,50,250,1000))
+  xx <- c(.01, .1, .2, .5, .75) 
+
+  boxes <- vector(mode = "list", length = length(break_colors))
+  for (color_idx in 1:length(break_colors)) {
+    boxes[[color_idx]] <- list(color_idx + .5, color_idx + 1.5, break_colors[color_idx])
+  }
+  # boxes <- list(
+  #   list(5.5, 6.5, "aliceblue"),
+  #   list(4.5, 5.5, "cornsilk"),
+  #   list(3.5, 4.5, "lavender"),
+  #   list(2.5, 3.5, "ivory"),
+  #   list(1.5, 2.5, grey(0.95))
+  # )
+  makebox <- function(x1, x2, color) {
+    xx <- c(x1, x1, x2, x2)
+    yy <- c(0,1,1,0)
+    polygon(cbind(xx, yy), border = NA, col = color)
+  }
+  for (box_idx in 1:length(boxes)) do.call(makebox, boxes[[box_idx]])
+
+  offset_idx <- 0
+  y_data <- NULL
+  for (find_source in sources_ordered) {
+    for (data_idx in 1:length(prop_data)) {
+      y_data <- with(prop_data[[data_idx]], {
+        if ((source == find_source) & (resolution == "coarse")) {
+          return(x)
+        }
+      })
+      if (!is.null(y_data)) break
+    }
+    offset <- -.21 + 0.14 * offset_idx
+    stopifnot(!is.null(y_data))
+    lines(2:6 + offset, y_data, type = "h", lwd = 5, col = colors[find_source], lty = 1)
+    offset_idx <- offset_idx + 1
+  }
+
+  legend("topright", legend = sources_ordered, col = colors[sources_ordered],
+         lty = 1, lwd = 2, cex = 1, bg = "white")
+}
+
+pdfAreaFigure()
+```
+
+
+```{r, eval = FALSE}
+pdf("AccuracyProfile.pdf", height = 8, width = 9)
+par(mar = c(5,5,3,2))
+pdfAreaFigure() 
+a <- dev.off(dev.cur())
+
+```
 
