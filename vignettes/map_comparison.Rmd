@@ -412,7 +412,11 @@ pop_scatter <- function(y_name, resolution, labels, title, maximum, background =
     xy <- density_from_source_resolution(y_source, y_resolution)
     cex <- symbol_size[as.character(y_resolution)]
     pch <- symbol_choice[as.character(y_resolution)]
-    color <- colors[y_source]
+    if (resolution[plot_idx] == "coarse") {
+      color <- colors[y_source]
+    } else {
+      color <- scales::alpha(colors[y_source], 0.2)
+    }
     if (!is.null(background) & plot_idx %in% background) {
       color <- colors["grey"]
     }
@@ -423,7 +427,7 @@ pop_scatter <- function(y_name, resolution, labels, title, maximum, background =
 
 ```{r all_together}
 density_label <- c("BIMEP Population Density", "Mapped Population Density")
-maximum1k <- 1.01 * max(xy_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
+maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
 the_three <- c("HRSL", "LandScan", "WorldPop")
 pop_scatter(
   c(the_three, "HRSL", "WorldPop"), c(rep("coarse", 3), rep("fine", 2)),
@@ -527,8 +531,7 @@ cdfAreaFigure(2)
 cdfDens <- function(H, log_base) {
   H <- sort(H)
   mx <- ceiling(log(max(H), base = log_base))
-  #print(c(mx=mx,pw=pw))
-  #browser() 
+  
   c2 <- 1:mx
   ixz <- which(H == 0)
   Pz <- length(ixz)
@@ -561,7 +564,7 @@ logPopAreaFigure <- function(llwd = 1, log_base = 2, label = "") {
   plot(
     vector(mode = "numeric", length = 0),
     log = "x",
-    xlim = c(1.05, 0.3 * 10^5),
+    xlim = c(1.05, 0.5 * 10^5),
     ylim = c(0, 1),
     xlab =  "log(Pop Dens)",
     ylab =  "Proportion of Population",
@@ -578,11 +581,11 @@ logPopAreaFigure <- function(llwd = 1, log_base = 2, label = "") {
       } else {
         data <- linear_from_source_resolution(source, resolution, density)$y
       }
-      log_max <- max(log_max, log10(max(data)))
+      log_max <- max(log_max, log10(max(data, na.rm = TRUE)))
       logPopAreaLines(data, source, resolution, log_base, linewidth = llwd)
     }
   }
-  axis(1, 10^(0:(log_max + 1)) + 0.5, logarithmic_axis_labels[1:(log_max + 2)])
+  axis(1, 10^(0:(log_max + 1)), logarithmic_axis_labels[1:(log_max + 2)])
   legend("topleft", legend =  sources, col = colors[sources],
          lty = 1, lwd = 2, cex = 1)
 }
@@ -593,6 +596,7 @@ logPopAreaFigure(2)
 Now the third part of Figure 5, a density plot that is just density, not cumulative.
 ```{r density_bins}
 log_density <- function(H, base_power = 2) {
+  H <- H[!is.na(H)]
   c2 <- ceiling(max(log(H[H > 0], base = base_power)))
   ixz <- which(H <= 0)
   upper <- 0
