@@ -676,6 +676,22 @@ Figure 6 is proportion, accuracy, recall, and precision.
 The following functions in compute the specificity and sensitivity of
 a map compared with a gold standard: 
 ```{r}
+breakpoints <- c(
+  empty = 0,
+  rural1 = 1,
+  rural2 = 50,
+  periurban = 250,
+  urban = 1000
+)
+break_colors <- c(
+  empty = grey(0.95),
+  rural1 = "ivory",
+  rural2 = "lavender",
+  periurban = "cornsilk",
+  urban = "aliceblue"
+)
+stopifnot(all(names(breakpoints) == names(break_colors)))
+
 lessThanCat <- function(tau, map, gold, km2 = 1) {
   tau <- tau * km2
   accuracy_profile(truth_table(function(observed) {observed < tau}, gold, map))
@@ -693,20 +709,22 @@ betweenCat <- function(L, U, map, gold, km2 = 1) {
   accuracy_profile(truth_table(function(obs) {L <= obs & obs < U }, gold, map))
 }
 
-fullCat <- function(E, E1, R1, R2, U, map, gold, km2 = 1) {
-  data.frame(as.vector(rbind(
-    empty = lessThanCat(E, map, gold, km2),
-    rural1 = betweenCat(E1, R1, map, gold, km2),
-    rural2 = betweenCat(R1, R2, map, gold, km2),
-    periurban = betweenCat(R2, U, map, gold, km2),
-    urban = greaterThanCat(U, map, gold, km2)
-  )))
+fullCat <- function(map, gold, km2 = 1) {
+  with(as.list(breakpoints), {
+    data.frame(as.vector(rbind(
+      empty = lessThanCat(rural1, map, gold, km2),
+      rural1 = betweenCat(rural1, rural2, map, gold, km2),
+      rural2 = betweenCat(rural2, periurban, map, gold, km2),
+      periurban = betweenCat(periurban, urban, map, gold, km2),
+      urban = greaterThanCat(urban, map, gold, km2)
+    )))
+  })
 }
 ```
 
 ## Proportion
 
-```{r}
+```{r proportion_setup}
 landAA <- function(H, breakpoints, area = 1) {
   stopifnot(class(breakpoints) == "numeric")
   breakpoints <- c(breakpoints, Inf) / area
@@ -749,21 +767,6 @@ example_data <- proportion_data(c(1, 50, 250, 1000))
 
 
 ```{r}
-breakpoints <- c(
-  empty = 0,
-  rural1 = 1,
-  rural2 = 50,
-  periurban = 250,
-  urban = 1000
-)
-break_colors <- c(
-  empty = grey(0.95),
-  rural1 = "ivory",
-  rural2 = "lavender",
-  periurban = "cornsilk",
-  urban = "aliceblue"
-)
-
 #' Make shaded backgrounds for all four figures.
 #' @param splits The sides of the boxes, where colors change.
 make_boxes <- function(splits) {
@@ -917,4 +920,24 @@ PPVProfile(acc_y, "Accuracy")
 ```{r generate_accuracy}
 sens_y <- generate_accuracy_y(xx, "sens")
 PPVProfile(sens_y, "Sensitivity")
+```
+
+## Table of ranges
+This is table 3, which has accuracy, recall, and precision for ranges of values.
+
+```{r accuracy_table}
+HRSL <- fullCat(ppv_data["y", "HRSL"][[1]], ppv_data["x", "HRSL"][[1]])
+LS <- fullCat(ppv_data["y", "LandScan"][[1]], ppv_data["x", "LandScan"][[1]])
+WP <- fullCat(ppv_data["y", "WorldPop"][[1]], ppv_data["x", "WorldPop"][[1]])
+
+# ppv <- cbind(HRSL = as.vector(HRSL$ppv), LS = as.vector(LS$ppv), WP = as.vector(WP$ppv))
+# sens <- cbind(HRSL = as.vector(HRSL$sens), LS = as.vector(LS$sens), WP = as.vector(WP$sens))
+# acc <- cbind(HRSL = as.vector(HRSL$acc), LS = as.vector(LS$acc), WP = as.vector(WP$acc))
+
+ppv <- cbind(HRSL = as.numeric(HRSL$ppv), LS = as.numeric(LS$ppv), WP = as.numeric(WP$ppv))
+sens <- cbind(HRSL = as.numeric(HRSL$sens), LS = as.numeric(LS$sens), WP = as.numeric(WP$sens))
+acc <- cbind(HRSL = as.numeric(HRSL$acc), LS = as.numeric(LS$acc), WP = as.numeric(WP$acc))
+accuracy_as_table <- signif(cbind(acc, sens, ppv), 3)
+rownames(accuracy_as_table) <- rownames(HRSL)
+t(accuracy_as_table)
 ```
