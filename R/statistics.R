@@ -139,3 +139,59 @@ summary_statistics <- function(population, density, urban_per_kilometer_sq) {
     na_percent = 100 * sum(is.na(population_array)) / length(population_array)
   )
 }
+
+
+
+#' Calculate accuracy, sensitivity, and the like.
+#'
+#' This takes a truth table and returns accuracy,
+#' sensitivity, specificity, positive predictive
+#' validity, and negative predictive validity.
+#' The truth table is a count of true positive, false positive,
+#' true negative, and false negative.
+#'
+#' @param logic_table A list with names TP, FP, TN, FN.
+#' @return A list with `(acc, sens, spec, ppv, npv)`
+#' @seealso \link{truth_table}
+#' @export
+accuracy_profile <- function(logic_table) {
+  with(logic_table, {
+    list(
+      acc = ifelse(TP + TN == 0, 0, (TP + TN) / (TP + TN + FN + FP)),
+      sens = ifelse(TP + FN == 0, 0, TP / (TP + FN)),
+      spec = ifelse(TN + FP == 0, 0, TN / (TN + FP)),
+      ppv = ifelse(TP + FP == 0, 0, TP / (TP + FP)),
+      npv = ifelse(TN + FN == 0, 0, TN / (TN + FN))
+    )
+  })
+}
+
+
+
+
+#' Constructs a count of how many entries are in which truth table quadrant.
+#'
+#' The behavior for NA is important here. If the expected value is NA,
+#' then this truth table ignores that entry, even if it's in the observed.
+#' We do this because we are looking at map data where NA represents places
+#' outside the map. Meanwhile, if the observed is NA, then we count that
+#' as false because it won't meet the condition.
+#'
+#' @param condition A function which, when applied to inputs, gives true and false.
+#' @param expected The gold standard for what's true and false.
+#' @param observed What is observed as true and false.
+#' @seealso \link{accuracy_profile}
+#' @export
+truth_table <- function(condition, expected, observed) {
+  left <- condition(expected)
+  right <- condition(observed)
+  right <- right[!is.na(left)]
+  left <- left[!is.na(left)]
+  right[is.na(right)] <- FALSE
+  list(
+    TP = sum(left & right),
+    FP = sum(!left & right),
+    FN = sum(left & !right),
+    TN = sum(!left & !right)
+  )
+}

@@ -1,0 +1,158 @@
+---
+title: "blurring"
+output: html_notebook
+---
+# Overview
+
+I want to find the average density of people within a one square kilometer
+disc. I used a for-loop to sum over neighboring grid cells, but this is
+both slow and imprecise, because I'd like to account for grid cells at
+the edge of the circle. The speed matters a bit because I'd like to do this
+10,000 times across a set of grids, in order to determine uncertainty from
+the gridding process.
+
+The `spatstat` package seems to have a really great function, but it
+hasn't been working well. This notebook is me squirrelling around with
+both the `spatstat::blur` command and modifications of it.
+
+```{r}
+library(raster)
+library(spatstat)
+```
+
+
+```{r}
+dims <- c(100, 100)  # row, column
+range <- c(2000, 2000)  # width, height
+
+dimension_coordinates <- function(range, dim) {
+  nn <- 0:dim * range / dim
+  0.5 * (nn[1:(length(nn) - 1)] + nn[2:length(nn)])
+}
+
+# xvals need columns, yvals need rows, so they are switched.
+xvals <- dimension_coordinates(range[1], dims[2])
+yvals <- dimension_coordinates(range[2], dims[1])
+pixel_area <- (xvals[2] - xvals[1]) * (yvals[2] - yvals[1])
+mat <- matrix(42.0, nrow = dims[1], ncol = dims[2])
+mid <- dims %/% 2
+mat[(mid[1] + 1):dims[1], 1:dims[2]] <- NA
+
+fake_im <- spatstat::im(mat, xcol = xvals, yrow = yvals)
+projected_raster <- raster::raster(maptools::as.SpatialGridDataFrame.im(fake_im))
+```
+
+```{r}
+plot(projected_raster)
+```
+
+
+```{r}
+Window(fake_im)
+```
+```{r}
+plot(Window(fake_im))
+```
+
+
+```{r}
+  sigma <- 0.5 * sqrt(10^6 / pi)
+  raster_im <- maptools::as.im.RasterLayer(projected_raster)
+  smoothed <- spatstat::blur(
+    raster_im,
+    sigma = sigma,
+    kernel = "disc",
+    normalise = FALSE,
+    bleed = FALSE
+    )
+  smoothed_raster <- raster::raster(maptools::as.SpatialGridDataFrame.im(smoothed))
+```
+
+```{r}
+vals <- as.array(smoothed)
+c(min(vals, na.rm = TRUE), max(vals, na.rm = TRUE))
+```
+```{r}
+plot(smoothed)
+```
+
+
+```{r}
+plot(smoothed_raster)
+```
+```{r}
+c(cellStats(smoothed_raster, stat = "min"), cellStats(smoothed_raster, stat = "max"))
+```
+```{r}
+dims <- c(100, 100)  # row, column
+range <- c(2000, 2000)  # width, height
+
+dimension_coordinates <- function(range, dim) {
+  nn <- 0:dim * range / dim
+  0.5 * (nn[1:(length(nn) - 1)] + nn[2:length(nn)])
+}
+
+# xvals need columns, yvals need rows, so they are switched.
+xvals <- dimension_coordinates(range[1], dims[2])
+yvals <- dimension_coordinates(range[2], dims[1])
+pixel_area <- (xvals[2] - xvals[1]) * (yvals[2] - yvals[1])
+mat <- matrix(0.0, nrow = dims[1], ncol = dims[2])
+mid <- dims %/% 2
+mat[mid[1], mid[2]] <- 50
+mat[(mid[1] + 1):dims[1], 1:dims[2]] <- NA
+
+fake_im <- spatstat::im(mat, xcol = xvals, yrow = yvals)
+projected_raster <- raster::raster(maptools::as.SpatialGridDataFrame.im(fake_im))
+```
+
+
+```{r}
+  sigma <- 0.5 * sqrt(10^6 / pi)
+  raster_im <- maptools::as.im.RasterLayer(projected_raster)
+  smoothed <- spatstat::blur(
+    raster_im,
+    sigma = sigma,
+    kernel = "disc",
+    normalise = TRUE,
+    bleed = FALSE
+    )
+  smoothed_raster <- raster::raster(maptools::as.SpatialGridDataFrame.im(smoothed))
+```
+
+```{r}
+vals <- as.array(smoothed)
+c(min(vals, na.rm = TRUE), max(vals, na.rm = TRUE))
+```
+
+```{r}
+plot(smoothed)
+```
+```{r}
+dims <- c(100, 100)  # row, column
+range <- c(2000, 2000)  # width, height
+
+dimension_coordinates <- function(range, dim) {
+  nn <- 0:dim * range / dim
+  0.5 * (nn[1:(length(nn) - 1)] + nn[2:length(nn)])
+}
+
+# xvals need columns, yvals need rows, so they are switched.
+xvals <- dimension_coordinates(range[1], dims[2])
+yvals <- dimension_coordinates(range[2], dims[1])
+pixel_area <- (xvals[2] - xvals[1]) * (yvals[2] - yvals[1])
+mat <- matrix(0.0, nrow = dims[1], ncol = dims[2])
+mid <- dims %/% 2
+peak <- 50
+mat[mid[1], mid[2]] <- peak
+mat[(mid[1] + 1):dims[1], 1:dims[2]] <- NA
+
+# The factor of 2 is because that density is in a half circle.
+max_density <- 2 * peak / 10^6
+cat(paste("max density =", max_density, "\n"))
+
+fake_im <- spatstat::im(mat, xcol = xvals, yrow = yvals)
+projected_raster <- raster::raster(maptools::as.SpatialGridDataFrame.im(fake_im))
+my_smoothed <- density_from_disc(projected_raster)
+plot(my_smoothed)
+```
+
