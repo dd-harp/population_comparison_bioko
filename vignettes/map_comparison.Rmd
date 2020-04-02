@@ -829,18 +829,20 @@ pdfAreaFigure()
 a <- dev.off(dev.cur())
 ```
 
+
 ## Precision
 
 Precision is also known as positive predictive value, so it's the ppv variable.
 
 ```{r}
-getPPV <- function(x, map, gold) {
+get_measure <- function(x, map, gold, measure) {
   if (x == 0) {
-    lessThanCat(x, map, gold)$ppv
+    lessThanCat(x, map, gold)[[measure]]
   } else {
-    greaterThanCat(x, map, gold)$ppv
+    greaterThanCat(x, map, gold)[[measure]]
   }
 }
+getPPV <- function(x, map, gold) get_measure(x, map, gold, "ppv")
 ```
 
 ```{r}
@@ -850,7 +852,7 @@ ppv_data <- sapply(compare_sources, function(x) {
 })
 dimnames(ppv_data) <- list(c("x", "y"), compare_sources)
 mn <- 1
-ppv_mx <- max(ppv_data["y", "LandScan"][[1]], na.rm = TRUE)
+ppv_mx <- 0.7 * max(ppv_data["y", "LandScan"][[1]], na.rm = TRUE)
 tk <- c(breakpoints, 4000, 10000)
 
 xx <- c(0, seq(sqrt(mn), sqrt(ppv_mx), length.out = 100)^2)
@@ -864,25 +866,34 @@ tk0 <- tk^pw
 
 ppv_splits <- c(breakpoints, ppv_mx)^pw
 
-ppv_y <- matrix(0, nrow = length(xx), ncol = length(compare_sources))
-for (source_idx in 1:length(compare_sources)) {
-  source <- compare_sources[source_idx]
-  gold <- ppv_data["x", source][[1]]
-  observed <- ppv_data["y", source][[1]]
-  ppv_y[1:length(xx), source_idx] <- as.vector(unlist(sapply(xx, getPPV, map = observed, gold = gold)))
+generate_accuracy_y <- function(xx, measure) {
+  ppv_y <- matrix(0, nrow = length(xx), ncol = length(compare_sources))
+  for (source_idx in 1:length(compare_sources)) {
+    source <- compare_sources[source_idx]
+    gold <- ppv_data["x", source][[1]]
+    observed <- ppv_data["y", source][[1]]
+    ppv_y[1:length(xx), source_idx] <- as.vector(unlist(sapply(
+      xx,
+      function(x, map, gold) get_measure(x, map, gold, measure),
+      map = observed,
+      gold = gold
+      )))
+  }
+  colnames(ppv_y) <- compare_sources
+  ppv_y
 }
-colnames(ppv_y) <- compare_sources
+ppv_y <- generate_accuracy_y(xx, "ppv")
 ```
 
 ```{r}
-PPVProfile <- function(lb = "") {
+PPVProfile <- function(ppv_y, name, lb = "") {
   plot(
     vector(mode = "numeric", length = 0),
     xlim = c(0, max(xxp)),
     ylim = c(0, 1),
     xaxt = "n",
     xlab = "Population Density",
-    ylab = "Precision",
+    ylab = name,
     main = lb
     )
   axis(1, tk0, tk)
@@ -894,5 +905,16 @@ PPVProfile <- function(lb = "") {
     lines(xxp, as.numeric(ppv_y[, col_idx]), type = "s", col = colors[source], lwd = 2)
   }
 }
-PPVProfile()
+PPVProfile(ppv_y, "Precision")
+```
+## Accuracy
+
+```{r generate_accuracy}
+acc_y <- generate_accuracy_y(xx, "acc")
+PPVProfile(acc_y, "Accuracy")
+```
+## Recall
+```{r generate_accuracy}
+sens_y <- generate_accuracy_y(xx, "sens")
+PPVProfile(sens_y, "Sensitivity")
 ```
