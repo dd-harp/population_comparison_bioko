@@ -671,6 +671,38 @@ density_kernel_figure(1.2, 2, "C")
 
 Figure 6 is proportion, accuracy, recall, and precision.
 
+## Define the values
+
+The following functions in compute the specificity and sensitivity of
+a map compared with a gold standard: 
+```{r}
+lessThanCat <- function(tau, map, gold, km2 = 1) {
+  tau <- tau * km2
+  accuracy_profile(truth_table(function(observed) {observed < tau}, gold, map))
+}
+
+greaterThanCat <- function(tau, map, gold, km2 = 1) {
+  tau <- tau * km2
+  accuracy_profile(truth_table(function(observed) {tau <= observed}, gold, map))
+}
+
+betweenCat <- function(L, U, map, gold, km2 = 1) {
+  L <- L * km2
+  U <- U * km2
+  # Choose comparison so that it is cadlag.
+  accuracy_profile(truth_table(function(obs) {L <= obs & obs < U }, gold, map))
+}
+
+fullCat <- function(E, E1, R1, R2, U, map, gold, km2 = 1) {
+  data.frame(as.vector(rbind(
+    empty = lessThanCat(E, map, gold, km2),
+    rural1 = betweenCat(E1, R1, map, gold, km2),
+    rural2 = betweenCat(R1, R2, map, gold, km2),
+    periurban = betweenCat(R2, U, map, gold, km2),
+    urban = greaterThanCat(U, map, gold, km2)
+  )))
+}
+```
 
 ## Proportion
 
@@ -691,7 +723,6 @@ landAA <- function(H, breakpoints, area = 1) {
 }
 
 over_arrays <- function(transform) {
-  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
   datasets <- vector(mode = "list", length = 2 * length(sources))
   running_idx <- 1
   for (source in sources) {
@@ -719,21 +750,40 @@ example_data <- proportion_data(c(1, 50, 250, 1000))
 
 ```{r}
 breakpoints <- c(
-  rural0 = 1,
-  rural1 = 50,
-  rural2 = 250,
+  empty = 0,
+  rural1 = 1,
+  rural2 = 50,
+  periurban = 250,
   urban = 1000
 )
 break_colors <- c(
   empty = grey(0.95),
-  rural0 = "ivory",
-  rural1 = "lavender",
-  rural2 = "cornsilk",
+  rural1 = "ivory",
+  rural2 = "lavender",
+  periurban = "cornsilk",
   urban = "aliceblue"
 )
 
+#' Make shaded backgrounds for all four figures.
+#' @param splits The sides of the boxes, where colors change.
+make_boxes <- function(splits) {
+  stopifnot(length(splits) == length(break_colors) + 1)
+  boxes <- vector(mode = "list", length = length(break_colors))
+  for (color_idx in 1:length(break_colors)) {
+    boxes[[color_idx]] <- list(splits[color_idx], splits[color_idx + 1], break_colors[color_idx])
+  }
+  makebox <- function(x1, x2, color) {
+    xx <- c(x1, x1, x2, x2)
+    yy <- c(0,1,1,0)
+    polygon(cbind(xx, yy), border = NA, col = color)
+  }
+  for (box_idx in 1:length(boxes)) do.call(makebox, boxes[[box_idx]])
+}
+
+
 pdfAreaFigure <- function(lb = "") {
-  prop_data <- proportion_data(breakpoints)
+  # Start from 2 because this function uses the upper cutoff.
+  prop_data <- proportion_data(breakpoints[2:length(breakpoints)])
   plot(
     vector(mode = "numeric", length = 0),
     xlim = c(1, 7),
@@ -744,26 +794,9 @@ pdfAreaFigure <- function(lb = "") {
     main = ""
     )
   axis(1, c(2, 2:5 + 0.5), c(0,1,50,250,1000))
-  xx <- c(.01, .1, .2, .5, .75) 
 
-  boxes <- vector(mode = "list", length = length(break_colors))
-  for (color_idx in 1:length(break_colors)) {
-    boxes[[color_idx]] <- list(color_idx + .5, color_idx + 1.5, break_colors[color_idx])
-  }
-  # boxes <- list(
-  #   list(5.5, 6.5, "aliceblue"),
-  #   list(4.5, 5.5, "cornsilk"),
-  #   list(3.5, 4.5, "lavender"),
-  #   list(2.5, 3.5, "ivory"),
-  #   list(1.5, 2.5, grey(0.95))
-  # )
-  makebox <- function(x1, x2, color) {
-    xx <- c(x1, x1, x2, x2)
-    yy <- c(0,1,1,0)
-    polygon(cbind(xx, yy), border = NA, col = color)
-  }
-  for (box_idx in 1:length(boxes)) do.call(makebox, boxes[[box_idx]])
-
+  make_boxes(1:6 + 0.5)
+  
   offset_idx <- 0
   y_data <- NULL
   for (find_source in sources_ordered) {
@@ -792,8 +825,74 @@ pdfAreaFigure()
 ```{r, eval = FALSE}
 pdf("AccuracyProfile.pdf", height = 8, width = 9)
 par(mar = c(5,5,3,2))
-pdfAreaFigure() 
+pdfAreaFigure()
 a <- dev.off(dev.cur())
-
 ```
 
+## Precision
+
+Precision is also known as positive predictive value, so it's the ppv variable.
+
+```{r}
+getPPV <- function(x, map, gold) {
+  if (x == 0) {
+    lessThanCat(x, map, gold)$ppv
+  } else {
+    greaterThanCat(x, map, gold)$ppv
+  }
+}
+```
+
+```{r}
+compare_sources <- sources[!sources %in% "BIMEP"]
+ppv_data <- sapply(compare_sources, function(x) {
+  linear_from_source_resolution(x, "coarse", density)
+})
+dimnames(ppv_data) <- list(c("x", "y"), compare_sources)
+mn <- 1
+ppv_mx <- max(ppv_data["y", "LandScan"][[1]], na.rm = TRUE)
+tk <- c(breakpoints, 4000, 10000)
+
+xx <- c(0, seq(sqrt(mn), sqrt(ppv_mx), length.out = 100)^2)
+xxp <- sqrt(xx)
+tk0 <- sqrt(tk)
+
+pw <- 1 / 3.5
+xx <- c(0, seq(mn^pw, ppv_mx^pw, length.out = 100)^(1 / pw))
+xxp <- xx^pw
+tk0 <- tk^pw
+
+ppv_splits <- c(breakpoints, ppv_mx)^pw
+
+ppv_y <- matrix(0, nrow = length(xx), ncol = length(compare_sources))
+for (source_idx in 1:length(compare_sources)) {
+  source <- compare_sources[source_idx]
+  gold <- ppv_data["x", source][[1]]
+  observed <- ppv_data["y", source][[1]]
+  ppv_y[1:length(xx), source_idx] <- as.vector(unlist(sapply(xx, getPPV, map = observed, gold = gold)))
+}
+colnames(ppv_y) <- compare_sources
+```
+
+```{r}
+PPVProfile <- function(lb = "") {
+  plot(
+    vector(mode = "numeric", length = 0),
+    xlim = c(0, max(xxp)),
+    ylim = c(0, 1),
+    xaxt = "n",
+    xlab = "Population Density",
+    ylab = "Precision",
+    main = lb
+    )
+  axis(1, tk0, tk)
+
+  make_boxes(ppv_splits)
+
+  for (col_idx in 1:ncol(ppv_y)) {
+    source <- colnames(ppv_y)[col_idx]
+    lines(xxp, as.numeric(ppv_y[, col_idx]), type = "s", col = colors[source], lwd = 2)
+  }
+}
+PPVProfile()
+```
