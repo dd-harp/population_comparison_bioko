@@ -150,8 +150,21 @@ bimep_population_as_points <- function(local_directory = "inst/extdata") {
 #' @export
 bimep_on_grid <- function(grid, bioko_sf, local_directory = "inst/extdata") {
   features <- read_bimep_point_data(local_directory)
-  house_and_na <- raster::rasterize(features, grid, fun = sum, field = "pop")
-  hrsl_zero_mask <- raster::rasterize(bioko_sf, grid, field = 0)
+  geolocated_on_grid(grid, features, bioko_sf, local_directory)
+}
+
+
+#' Aligns long-lat per-house data to a given raster grid.
+#'
+#' @param grid A raster::raster to which to align
+#' @param geolocated GPS data that's exact
+#' @param admin_sf A shapefile that defines where population is zero.
+#' @return A raster::raster with the new data on longlat, na in ocean,
+#'   zero or a pop value on land.
+#' @export
+geolocated_on_grid <- function(grid, gelocated, admin_sf) {
+  house_and_na <- raster::rasterize(gelocated, grid, fun = sum, field = "pop")
+  hrsl_zero_mask <- raster::rasterize(admin_sf, grid, field = 0)
   house_and_zero <- raster::cover(house_and_na, hrsl_zero_mask)
   names(house_and_zero) <- c("BIMEP")
   house_and_zero

@@ -14,7 +14,11 @@ truth_table(condition, expected, observed)
 \item{observed}{What is observed as true and false.}
 }
 \description{
-Constructs a count of how many entries are in which truth table quadrant.
+The behavior for NA is important here. If the expected value is NA,
+then this truth table ignores that entry, even if it's in the observed.
+We do this because we are looking at map data where NA represents places
+outside the map. Meanwhile, if the observed is NA, then we count that
+as false because it won't meet the condition.
 }
 \seealso{
 \link{accuracy_profile}

@@ -917,7 +917,7 @@ acc_y <- generate_accuracy_y(xx, "acc")
 PPVProfile(acc_y, "Accuracy")
 ```
 ## Recall
-```{r generate_accuracy}
+```{r generate_accuracy2}
 sens_y <- generate_accuracy_y(xx, "sens")
 PPVProfile(sens_y, "Sensitivity")
 ```
