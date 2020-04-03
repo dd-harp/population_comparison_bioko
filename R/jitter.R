@@ -26,21 +26,21 @@ summary_statistics_multiple_grids <- function(grid, shift_cnt, output) {
   write(1:3, output)
   file.remove(output)
 
-  local_directory <- "ext/instdata"
+  local_directory <- rprojroot::find_package_root_file("inst/extdata")
   urban_cutoff <- 1500
 
   geolocated <- read_bimep_point_data(local_directory)
   admin_sf <- sf::st_read(fs::path(local_directory, "source", "bioko.shp"))
-  base_grid <- available_grids[tolower(grid)](local_directory)
-  grid <- clean_grid(base_grid, admin_sf, local_directory)
+  base_grid <- available_grids[[tolower(grid)]](local_directory)
+  grid_raster <- clean_grid(base_grid, admin_sf)
 
   summarizer <- function(pixel_fraction) {
-    summarize(geolocated, admin_sf, grid, pixel_fraction, urban_cutoff, local_directory)
+    summarize_shifted_alignment(geolocated, admin_sf, grid_raster, pixel_fraction, urban_cutoff)
   }
   summaries <- summarize_over_shifts(shift_cnt, summarizer)
   summaries["grid"] <- grid
   summaries["shift_cnt"] <- shift_cnt
-  write.csv(summaries, output, stringsAsFactors = FALSE, quote = FALSE, row.names = FALSE)
+  write.csv(summaries, output, quote = FALSE, row.names = FALSE)
 }
 
 
@@ -49,6 +49,7 @@ summary_statistics_multiple_grids <- function(grid, shift_cnt, output) {
 #' @param grid A raster to which to align.
 #' @param admin_sf An sf shapefile that is the admin for cropping.
 #' @return A raster that is ready to use as a template.
+#' @export
 clean_grid <- function(grid, admin_sf) {
   hrsl_raster_crop <- raster::crop(grid, admin_sf, snap = "out")
   hrsl_zero_mask <- raster::rasterize(admin_sf, hrsl_raster_crop, field = 0)
@@ -67,7 +68,7 @@ clean_grid <- function(grid, admin_sf) {
 #' @param urban_cutoff A density above which summary statistics will call a place urban.
 #' @return A list of summary statistics.
 #' @export
-summarize <- function(geolocated, admin_sf, grid, shift, urban_cutoff) {
+summarize_shifted_alignment <- function(geolocated, admin_sf, grid, shift, urban_cutoff) {
   shifted_grid <- raster::shift(
     grid, dx = shift[1] * raster::xres(grid), dy = shift[2] * raster::yres(grid))
   gridded <- geolocated_on_grid(shifted_grid, geolocated, admin_sf)
@@ -92,7 +93,11 @@ summarize_over_shifts <- function(shift_cnt, summarizer) {
   summaries <- vector(mode = "list", length = ncol(shifts))
   for (shift_idx in 1:ncol(shifts)) {
     pixel_fraction <- (shifts[, shift_idx] - 1) / shift_cnt
-    summaries[shift_idx] <- summarizer(pixel_fraction)
+    summaries[[shift_idx]] <- summarizer(pixel_fraction)
   }
-  as.data.frame(do.call(rbind, summaries))
+  df <- data.frame(
+    matrix(unlist(do.call(rbind, summaries)), nrow = ncol(shifts)),
+    stringsAsFactors = FALSE
+    )
+  setNames(df, names(summaries[[1]]))
 }

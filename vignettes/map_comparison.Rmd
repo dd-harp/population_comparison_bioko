@@ -314,6 +314,19 @@ as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) < 500, ]))
 as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) > 500, ]))
 ```
 
+## Error Bounds
+
+Carlos asked how much the exact alignment of the grid matters.
+The gold data is point data. Grids that are shifted slightly will have
+slightly different values in the tables. So let's shift each major grid
+a bunch of times and see what the values are.
+
+```{error_bounds, eval = FALSE}
+summary_statistics_multiple_grids("landscan", 32, "landscan.csv")
+summary_statistics_multiple_grids("hrsl", 32, "hrsl.csv")
+summary_statistics_multiple_grids("worldpop", 32, "worldpop.csv")
+```
+
 ## Discussion
 
 - Using estimation to find the urban area matters for the 100m

@@ -104,7 +104,7 @@ read_bimep_point_data <- function(local_directory = "inst/extdata") {
     sf::st_point(c(pops[idx, "lon"], pops[idx, "lat"]))
   })
   sf::st_sf(
-    st_as_sfc(projected_cell_center),
+    sf::st_as_sfc(projected_cell_center),
     pop = without_index$pop,
     crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
   )

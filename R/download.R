@@ -174,6 +174,7 @@ read_landscan <- function(local_directory = "inst/extdata") {
   raster::raster(fs::path(local_directory, "LandScan Global 2018", "lspop2018"))
 }
 
+
 #' Load WorldPop raster file.
 
 #' @param local directory Where to put that file on the local machine.
@@ -184,6 +185,7 @@ read_worldpop <- function(local_directory = "inst/extdata") {
   raster::raster(fs::path(
     local_directory, "Equatorial_Guinea_100m_Population", wp_options[["adjusted"]]))
 }
+
 
 #' Write a raster layer to a file.
 #'

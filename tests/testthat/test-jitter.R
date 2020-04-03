@@ -16,13 +16,29 @@ fake_summary_statistics <- function(pixel_fraction) {
   )
 }
 
+
 test_that("the summarize loop properly gathers its outputs", {
+  tempfile <- "test.csv"
+  if (file.exists(tempfile)) file.remove(tempfile)
   values <- summarize_over_shifts(4, fake_summary_statistics)
   expect_equal(class(values), "data.frame")
   expect_equal(nrow(values), 16)
+  write.csv(values, tempfile, quote = FALSE, row.names = FALSE)
 })
 
 
 test_that("summarize can do one grid", {
-  expect_true(TRUE)
+  skip("taking longer")
+  local_directory <- rprojroot::find_package_root_file("inst/extdata")
+  geolocated <- read_bimep_point_data(local_directory)
+  admin_sf <- sf::st_read(fs::path(local_directory, "source", "bioko.shp"))
+  base_grid <- read_landscan(local_directory)
+  grid <- clean_grid(base_grid, admin_sf)
+  pixel_fraction <- c(0.1, 0.1)
+  urban_cutoff <- 1000
+  summary <- summarize_shifted_alignment(geolocated, admin_sf, grid, pixel_fraction, urban_cutoff)
+  expect_gt(length(summary), 5)
+  expect_gt(summary$total, 10000)
+  expect_gt(summary$maximum, 1000)
+  expect_gt(summary$empty_percent, 20)
 })
