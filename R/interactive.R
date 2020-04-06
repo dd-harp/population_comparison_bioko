@@ -7,10 +7,7 @@
 #' @return The filenames to which it saved.
 #' @export
 save_image <- function(name) {
-  image_directory <- rampdata::local_path(
-    list(stage = "working", rproject = "gisdemog", path = "images"),
-    rampdata::data_configuration()
-  )
+  image_directory <- rprojroot::find_package_root_file("images")
   if (!dir.exists(image_directory)) {
     dir.create(image_directory, showWarnings = FALSE, recursive = TRUE)
   }
@@ -34,10 +31,10 @@ save_image <- function(name) {
 #' @return The filenames to which it saved.
 #' @export
 save_plot <- function(plot_function, name) {
-  image_directory <- rampdata::local_path(
-    list(stage = "working", rproject = "gisdemog", path = "images"),
-    rampdata::data_configuration()
-  )
+  image_directory <- rprojroot::find_package_root_file("images")
+  if (!dir.exists(image_directory)) {
+    dir.create(image_directory, showWarnings = FALSE, recursive = TRUE)
+  }
   if (!dir.exists(image_directory)) {
     dir.create(image_directory, showWarnings = FALSE, recursive = TRUE)
   }
