@@ -121,8 +121,8 @@ summary_statistics <- function(population, density, urban_per_kilometer_sq) {
   population_array <- raster::as.array(population)
   pixel_size_km <- square_meters_per_pixel.raster(population) / 10^6
   zero_cutoff <- 0.1 * pixel_size_km
-  raw_urban <- urban_fraction(population, urban_per_kilometer_sq)
-  fit_urban <- urban_fraction(density, urban_per_kilometer_sq)
+  raw_urban <- urban_fraction_population(population, urban_per_kilometer_sq)
+  fit_urban <- urban_fraction_density(density, urban_per_kilometer_sq)
   list(
     total = sum(population_array, na.rm = TRUE),
     side_meters = sqrt(pixel_size_km * 10^6),

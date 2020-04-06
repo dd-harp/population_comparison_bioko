@@ -34,7 +34,7 @@ test_that("urban fraction ignores NA", {
     xmn = 0, xmx = 1000,
     ymn = 0, ymx = 1000
     )
-  numden <- urban_fraction(place_raster, 1000)
+  numden <- urban_fraction_population(place_raster, 1000)
   frac <- numden[1] / numden[2]
   expect_true(abs(frac - 0.25) < 1e-7, paste("fraction is", frac))
 })

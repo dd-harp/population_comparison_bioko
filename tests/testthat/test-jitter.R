@@ -28,7 +28,6 @@ test_that("the summarize loop properly gathers its outputs", {
 
 
 test_that("summarize can do one grid", {
-  skip("taking longer")
   local_directory <- rprojroot::find_package_root_file("inst/extdata")
   geolocated <- read_bimep_point_data(local_directory)
   admin_sf <- sf::st_read(fs::path(local_directory, "source", "bioko.shp"))

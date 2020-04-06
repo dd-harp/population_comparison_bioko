@@ -96,7 +96,7 @@ We measure pixel threshold as a number of people per square
 meter. We need to know the size of each pixel in order to do that.
 It helps to know how many pixels we're talking about, so we return
 the numerator and denominator of each fraction.
-```{r urban_fraction_raw, code = capture.output(dump("urban_fraction", ""))}
+```{r urban_fraction_raw, code = capture.output(dump("urban_fraction_population", ""))}
 ```
 We can reuse this function for the kernel density estimation
 by applying it to the estimated density instead of the

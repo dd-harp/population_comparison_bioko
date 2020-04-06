@@ -138,15 +138,34 @@ im_to_raster <- function(spat_im, projection) {
 }
 
 
-#' Urban fraction from a density raster
+#' Urban fraction from a population raster
+#'
+#' This assumes that raster values are population in that grid location,
+#' not density of the population in the vicinity of that grid location.
+#' It divides population by the area of the grid pixel.
 #'
 #' @param pop_raster A raster::raster in projection
 #' @param urban_per_kilometer_sq A number of people to define urban (1000, 1500).
 #' @return A vector with c(numerator, denominator) of pixel counts.
 #' @export
-urban_fraction <- function(density_raster, urban_per_kilometer_sq) {
+urban_fraction_population <- function(density_raster, urban_per_kilometer_sq) {
   urban_per_meter_sq <- urban_per_kilometer_sq / 10^6
   urban_per_pixel_sq <- urban_per_meter_sq * square_meters_per_pixel.raster(density_raster)
   vals <- raster::getValues(density_raster)
   c(sum(vals > urban_per_pixel_sq, na.rm = TRUE), sum(!is.na(vals)))
+}
+
+
+#' Urban fraction from a density raster
+#'
+#' This assumes that the raster values are density per square kilometer.
+#' It counts raster values above a cutoff.
+#'
+#' @param pop_raster A raster::raster in projection
+#' @param urban_per_kilometer_sq A number of people to define urban (1000, 1500).
+#' @return A vector with c(numerator, denominator) of pixel counts.
+#' @export
+urban_fraction_density <- function(density_raster, urban_per_kilometer_sq) {
+  vals <- raster::getValues(density_raster)
+  c(sum(vals > urban_per_kilometer_sq, na.rm = TRUE), sum(!is.na(vals)))
 }
