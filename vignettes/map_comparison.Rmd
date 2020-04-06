@@ -23,6 +23,7 @@ by comparing them with a gold standard map.
 
 ```{r load_libraries, include = FALSE}
 library(dplyr)
+library(ggplot2)
 library(maptools)
 library(plotrix)
 library(sf)
@@ -322,11 +323,67 @@ slightly different values in the tables. So let's shift each major grid
 a bunch of times and see what the values are.
 
 ```{error_bounds, eval = FALSE}
-summary_statistics_multiple_grids("landscan", 32, "landscan.csv")
-summary_statistics_multiple_grids("hrsl", 32, "hrsl.csv")
-summary_statistics_multiple_grids("worldpop", 32, "worldpop.csv")
+# With side_len = 10, this can take two hours to run.
+error_dir <- fs::path(params$data_directory, "errors")
+side_len <- 10
+for (grid in c("landscan", "hrsl", "worldpop")) {
+  stats_file <- fs::path(error_dir, paste(grid, "csv", sep = "."))
+  popbioko::summary_statistics_multiple_grids(grid, side_len, stats_file)
+}
 ```
 
+```{r process_errors}
+error_dir <- fs::path(params$data_directory, "errors")
+csvs <- do.call(
+  rbind,
+  lapply(
+    list.files(error_dir, pattern = ".csv$", full.names = TRUE),
+    function(csv) {read.csv(csv, header = TRUE, stringsAsFactors = TRUE)}
+    ),
+)
+```
+
+I'm curious how much urban fit varies. What I see is that the mean doesn't change much but
+the more coarse grids have a larger standard deviation.
+```{r plot_urban_fit}
+ggplot(csvs, aes(x = urban_fit, group = grid)) +
+  geom_histogram(bins = 50) +
+    facet_grid(grid ~ .)
+```
+The percent of NA values is the size of the border around the island. This
+is kind of a control. We see it doesn't vary a lot.
+```{r plot_na_percent}
+ggplot(csvs, aes(x = na_percent, group = grid)) +
+  geom_histogram(bins = 200) +
+    facet_grid(grid ~ .)
+```
+I don't know how I expect pareto fraction to vary as the grid size changes.
+I feel kind of surprised. I think this is a result of having small
+statistics and using a non-statistical estimator.
+```{r plot_pareto_fraction}
+ggplot(csvs, aes(x = pareto_fraction, group = grid)) +
+  geom_histogram(bins = 200) +
+    facet_grid(grid ~ .)
+```
+The maximum pixel value, of the population, not the population density.
+It looks like there's more noise in the coarse grid.
+```{r plot_raw_max}
+ggplot(csvs, aes(x = maximum, group = grid)) +
+  geom_histogram(bins = 200) +
+    facet_grid(grid ~ .)
+```
+Let's look more closely by dividing by the mean in each case.
+We see that they all have about the same uncertainty in the maximum
+when you divide by the mean.
+```{r plot_max}
+mean_max <- aggregate(maximum ~ grid, FUN = mean, data = csvs)
+names(mean_max)[names(mean_max) %in% "maximum"] <- "mean_max"
+with_mean <- merge(csvs, mean_max)
+with_mean["nmax"] <- with_mean$maximum / with_mean$mean_max
+ggplot(with_mean, aes(x = nmax, group = grid)) +
+  geom_histogram(bins = 50) +
+    facet_grid(grid ~ .)
+```
 ## Discussion
 
 - Using estimation to find the urban area matters for the 100m
