@@ -175,6 +175,18 @@ read_landscan <- function(local_directory = "inst/extdata") {
 }
 
 
+#' Load WorldPop raster file.
+
+#' @param local directory Where to put that file on the local machine.
+#' @return a `raster::raster` file.
+#' @export
+read_worldpop <- function(local_directory = "inst/extdata") {
+  wp_options <- list(raw = "GNQ15v2.tif", adjusted = "GNQ15adjv2.tif")
+  raster::raster(fs::path(
+    local_directory, "Equatorial_Guinea_100m_Population", wp_options[["adjusted"]]))
+}
+
+
 #' Write a raster layer to a file.
 #'
 #' Our intermediate datasets go into a directory with a given format.

@@ -119,17 +119,19 @@ urban_fraction_by_density_estimator <- function(
 #' @export
 summary_statistics <- function(population, density, urban_per_kilometer_sq) {
   population_array <- raster::as.array(population)
+  density_array <- raster::as.array(density)
   pixel_size_km <- square_meters_per_pixel.raster(population) / 10^6
   zero_cutoff <- 0.1 * pixel_size_km
-  raw_urban <- urban_fraction(population, urban_per_kilometer_sq)
-  fit_urban <- urban_fraction(density, urban_per_kilometer_sq)
+  raw_urban <- urban_fraction_population(population, urban_per_kilometer_sq)
+  fit_urban <- urban_fraction_density(density, urban_per_kilometer_sq)
   list(
     total = sum(population_array, na.rm = TRUE),
     side_meters = sqrt(pixel_size_km * 10^6),
     maximum = max(population_array, na.rm = TRUE),
+    max_density = max(density_array, na.rm = TRUE),
     empty_percent = 100 * sum(population_array < zero_cutoff, na.rm = TRUE) / sum(!is.na(population_array)),
     # Use the fit values for pareto fraction so they are more stable.
-    pareto_fraction = pareto_fraction(raster::as.array(density)),
+    pareto_fraction = pareto_fraction(density_array),
     urban_num = raw_urban[1],
     urban_den = raw_urban[2],
     urban_raw = as.numeric(raw_urban[1]) / raw_urban[2],

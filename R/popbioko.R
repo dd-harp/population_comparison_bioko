@@ -54,11 +54,25 @@
 #'   \item \link{pareto_fraction} - Compute pareto fraction of a vector.
 #'   \item \link{power_bandwidth} - Estimate bandwidth for a density function kernel with Bowman and Azzalini.
 #'   \item \link{density_estimated} - Create a map with density estimation
-#'   \item \link{urban_fraction} - Urban fraction from a density raster
+#'   \item \link{urban_fraction_population} - Urban fraction from a population raster
+#'   \item \link{urban_fraction_density} - Urban fraction from a density raster
 #'   \item \link{urban_fraction_by_density_estimator} - Calculate urban fraction using a density estimator
 #'   \item \link{summary_statistics} - Compute basic summary statistics.
 #' }
 #'
+#' @section Jittered Grid:
+#'
+#' These functions calculate summary statistics for the gold standard data for
+#' a set of grids that are slightly shifted, so that we can get a sense of error due
+#' to the exact placement of the grid.
+#'
+#' \itemize{
+#'   \item \link{summary_statistics_multiple_grids} - Script to compute summary statistics
+#'       with uncertainty from alignment of grid.
+#'   \item \link{clean_grid} - Given an input grid, crop it to the admin unit and give us a few pixels of border.
+#'   \item \link{summarize_shifted_alignment} - Compute summary statistics for geolocated data aligned to a grid.
+#'   \item \link{summarize_over_shifts} - Loops over the given grid shifts and runs the summarizer on each shift.
+#' }
 #'
 #'
 #' @docType package

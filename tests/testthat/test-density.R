@@ -16,8 +16,9 @@ test_that("density_from_disc average value correct for uniform population", {
   xvals <- dimension_coordinates(range[1], dims[2])
   yvals <- dimension_coordinates(range[2], dims[1])
   pixel_area <- (xvals[2] - xvals[1]) * (yvals[2] - yvals[1])
-  expected_density <- 500 * pixel_area / 10^6
-  mat <- matrix(expected_density, nrow = dims[1], ncol = dims[2])
+  expected_density <- 500
+  pop_per_pixel <- expected_density * pixel_area / 10^6
+  mat <- matrix(pop_per_pixel, nrow = dims[1], ncol = dims[2])
 
   fake_im <- spatstat::im(mat, xcol = xvals, yrow = yvals)
   fake_raster <- raster::raster(maptools::as.SpatialGridDataFrame.im(fake_im))
@@ -59,16 +60,16 @@ test_that("the area is a square kilometer", {
 
   # The values in that square kilometer add up to the single pixel in the center.
   expect_lt(
-    relative_error(sum(raster::values(blurred), na.rm = TRUE), peak_value),
+    relative_error(sum(raster::values(blurred), na.rm = TRUE), peak_value * square_km / pixel_area),
     one_percent
   )
 
   # The max value is the same as the average value, so it's a disc.
   # peak_value * pixel_area = max value * 1 km2
   # max value = peak value * pixel area / 1 km2
-  expected_max <- peak_value * pixel_area / square_km
+  expected_max <- peak_value
   observed_max <- max(raster::values(blurred), na.rm = TRUE)
-  expect_lt(relative_error(observed_max, expected_max), one_percent)
+  expect_lt(relative_error(observed_max, expected_max), 7 * one_percent)
 })
 
 
@@ -138,17 +139,8 @@ test_that("density_from_disc accounts for NA borders", {
   one_percent <- 1e-2
   expect_lt(relative_error(pixel_area_covered, 0.5 * square_km), 5 * one_percent)
 
-  # The values in that square kilometer add up to the single pixel in the center.
-  sum_values <- sum(raster::values(blurred), na.rm = TRUE)
-  expect_lt(
-    relative_error(sum_values, peak_value),
-    one_percent
-  )
-
-  # The max value is the same as the average value, so it's a disc.
-  # peak_value * pixel_area = max value * 1 km2
-  # max value = peak value * pixel area / 1 km2
-  expected_max <- peak_value * pixel_area / square_km
+  # The max value should be a 50 people in 1/2 a square kilometer.
+  expected_max <- 2 * peak_value
   observed_max <- max(raster::values(blurred), na.rm = TRUE)
-  expect_lt(relative_error(observed_max, expected_max), 5 * one_percent)
+  expect_lt(relative_error(observed_max, expected_max), 7 * one_percent)
 })

@@ -23,6 +23,7 @@ by comparing them with a gold standard map.
 
 ```{r load_libraries, include = FALSE}
 library(dplyr)
+library(ggplot2)
 library(maptools)
 library(plotrix)
 library(sf)
@@ -96,7 +97,7 @@ We measure pixel threshold as a number of people per square
 meter. We need to know the size of each pixel in order to do that.
 It helps to know how many pixels we're talking about, so we return
 the numerator and denominator of each fraction.
-```{r urban_fraction_raw, code = capture.output(dump("urban_fraction", ""))}
+```{r urban_fraction_raw, code = capture.output(dump("urban_fraction_population", ""))}
 ```
 We can reuse this function for the kernel density estimation
 by applying it to the estimated density instead of the
@@ -242,7 +243,7 @@ for_show <- function(summary_df) {
     grid = summary_df$grid,
     resolution = as.character(sprintf("%.1f", summary_df$side_meters)),
     total = sprintf("%.0f", summary_df$total),
-    maximum = sprintf("%.0f", summary_df$maximum),
+    max_density = sprintf("%.0f", summary_df$max_density),
     empty_percent = sprintf("%.4g", summary_df$empty_percent),
     na_percent = sprintf("%.4g", summary_df$na_percent),
     urban_raw = sprintf("%.4g", urban_raw_percent),
@@ -312,6 +313,142 @@ as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) < 500, ]))
 
 ```{r}
 as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) > 500, ]))
+```
+
+## Error Bounds
+
+Carlos asked how much the exact alignment of the grid matters.
+The gold data is point data. Grids that are shifted slightly will have
+slightly different values in the tables. So let's shift each major grid
+a bunch of times and see what the values are.
+
+```{r error_bounds, eval = FALSE}
+# With side_len = 10, this can take two hours to run.
+error_dir <- fs::path(params$data_directory, "errors")
+side_len <- 10
+for (grid in c("landscan", "hrsl", "worldpop")) {
+  stats_file <- fs::path(error_dir, paste(grid, "csv", sep = "."))
+  popbioko::summary_statistics_multiple_grids(grid, side_len, stats_file)
+}
+```
+
+```{r process_errors}
+error_dir <- fs::path(params$data_directory, "errors")
+csvs <- do.call(
+  rbind,
+  lapply(
+    list.files(error_dir, pattern = ".csv$", full.names = TRUE),
+    function(csv) {read.csv(csv, header = TRUE, stringsAsFactors = TRUE)}
+    ),
+)
+```
+
+I'm curious how much urban fit varies. What I see is that the mean doesn't change much but
+the more coarse grids have a larger standard deviation.
+```{r plot_urban_fit}
+ggplot(csvs, aes(x = urban_fit, group = grid)) +
+  geom_histogram(bins = 50) +
+    facet_grid(grid ~ .)
+```
+The percent of NA values is the size of the border around the island. This
+is kind of a control. We see it doesn't vary a lot.
+```{r plot_na_percent}
+ggplot(csvs, aes(x = na_percent, group = grid)) +
+  geom_histogram(bins = 200) +
+    facet_grid(grid ~ .)
+```
+I don't know how I expect pareto fraction to vary as the grid size changes.
+I feel kind of surprised. I think this is a result of having small
+statistics and using a non-statistical estimator.
+```{r plot_pareto_fraction}
+ggplot(csvs, aes(x = pareto_fraction, group = grid)) +
+  geom_histogram(bins = 200) +
+    facet_grid(grid ~ .)
+```
+The maximum pixel value, of the population, not the population density.
+It looks like there's more noise in the coarse grid.
+```{r plot_raw_max}
+ggplot(csvs, aes(x = max_density, group = grid)) +
+  geom_histogram(bins = 200) +
+    facet_grid(grid ~ .)
+```
+Let's look more closely by dividing by the mean in each case.
+We see that they all have about the same uncertainty in the maximum
+when you divide by the mean.
+```{r plot_max}
+mean_max <- aggregate(max_density ~ grid, FUN = mean, data = csvs)
+names(mean_max)[names(mean_max) %in% "max_density"] <- "mean_max"
+with_mean <- merge(csvs, mean_max)
+with_mean["nmax"] <- with_mean$max_density / with_mean$mean_max
+ggplot(with_mean, aes(x = nmax, group = grid)) +
+  geom_histogram(bins = 50) +
+    facet_grid(grid ~ .)
+```
+
+OK, so the plots aren't terribly skewed. We should use regular confidence intervals
+instead of bootstrapping. Maybe small values should use a Wald. Let's make values with
+confidence intervals for each of these datasets and take a look.
+```{r confidence_interval_on_grid_values}
+add_ci_to_column <- function(df, column) {
+  names(df)[names(df) %in% column] <- "target"
+  counted <- aggregate(target ~ grid, data = df, FUN = function(x) sum(!is.na(x)))
+  names(counted)[names(counted) %in% "target"] <- "n"
+  
+  mean_col <- aggregate(target ~ grid, FUN = mean, data = df)
+  names(mean_col)[names(mean_col) %in% "target"] <- "mean_val"
+  
+  sd_col <- aggregate(target ~ grid, FUN = sd, data = df)
+  names(sd_col)[names(sd_col) %in% "target"] <- "sd_val"
+
+  with_mean <- merge(merge(counted, mean_col), sd_col)
+  lower <- paste(column, "low", sep = "_")
+  upper <- paste(column, "up", sep = "_")
+  with_mean[lower] <- with(with_mean, mean_val - 1.96 * sd_val / sqrt(n))
+  with_mean[upper] <- with(with_mean, mean_val + 1.96 * sd_val / sqrt(n))
+  names(with_mean)[names(with_mean) %in% "mean_val"] <- column
+  with_mean[names(with_mean) %in% c(column, lower, upper, "grid")]
+}
+
+add_sd_to_column <- function(df, column) {
+  names(df)[names(df) %in% column] <- "target"
+  counted <- aggregate(target ~ grid, data = df, FUN = function(x) sum(!is.na(x)))
+  names(counted)[names(counted) %in% "target"] <- "n"
+  
+  mean_col <- aggregate(target ~ grid, FUN = mean, data = df)
+  names(mean_col)[names(mean_col) %in% "target"] <- column
+  
+  sd_col <- aggregate(target ~ grid, FUN = sd, data = df)
+  sd_name <- paste(column, "sd", sep = "_")
+  names(sd_col)[names(sd_col) %in% "target"] <- sd_name
+  together <- merge(mean_col, sd_col, by = "grid")
+  together[names(together) %in% c(column, sd_name, "grid")]
+}
+
+zdf <- data.frame(
+  rate = c(rnorm(10, mean = 0.5, sd = 0.2), rnorm(10, mean = 0.7, sd = 0.1)),
+  grid = c(rep("HRSL", 10), rep("LandScan", 10)),
+  stringsAsFactors = FALSE
+)
+
+# A little test
+zzdf <- add_ci_to_column(zdf, "rate")
+stopifnot(nrow(zzdf) == 2)
+stopifnot(all(zzdf$rate_low < zzdf$rate))
+stopifnot(all(zzdf$rate < zzdf$rate_up))
+
+zzdf <- add_sd_to_column(zdf, "rate")
+zzdf
+```
+
+```{r make_columns}
+consider_error <- c("max_density", "empty_percent", "urban_fit", "pareto_fraction")
+stopifnot(all(consider_error %in% names(csvs)))
+single_ci <- function(col) add_sd_to_column(csvs, col)
+ans_df <- single_ci(consider_error[1])
+for (col in consider_error[2:length(consider_error)]) {
+  ans_df <- merge(ans_df, single_ci(col))
+}
+ans_df
 ```
 
 ## Discussion
@@ -394,7 +531,9 @@ density_from_source_resolution <- function(source, resolution) {
 }
 
 
-pop_scatter <- function(y_name, resolution, labels, title, maximum, background = NULL) {
+pop_scatter <- function(
+  y_name, resolution, labels, title, maximum, background = NULL, counts = NULL
+  ) {
   plot(
     vector(mode = "numeric", length = 0),
     xlim = c(0, maximum), ylim = c(0, maximum),
@@ -407,10 +546,16 @@ pop_scatter <- function(y_name, resolution, labels, title, maximum, background =
   segments(logoff(1), logoff(1), logoff(1), logoff(10^5), col = colors["grey"])
   segments(logoff(1), logoff(1), logoff(10^5), logoff(1), col = colors["grey"])
 
+  if (is.null(counts)) {
+    data_function <- density_from_source_resolution
+  } else {
+    data_function <- xy_from_source_resolution
+  }
+  
   for (plot_idx in 1:length(y_name)) {
     y_source <- y_name[plot_idx]
     y_resolution <- resolution[plot_idx]
-    xy <- density_from_source_resolution(y_source, y_resolution)
+    xy <- data_function(y_source, y_resolution)
     cex <- symbol_size[as.character(y_resolution)]
     pch <- symbol_choice[as.character(y_resolution)]
     if (resolution[plot_idx] == "coarse") {
@@ -429,30 +574,71 @@ pop_scatter <- function(y_name, resolution, labels, title, maximum, background =
 ```{r all_together}
 density_label <- c("BIMEP Population Density", "Mapped Population Density")
 maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
-the_three <- c("HRSL", "LandScan", "WorldPop")
-pop_scatter(
-  c(the_three, "HRSL", "WorldPop"), c(rep("coarse", 3), rep("fine", 2)),
-  density_label, "A", maximum1k)
-legend("topleft", legend =  the_three, col = colors[the_three],
-           lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
+
+scatter1k_together <- function() {
+  maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
+  the_three <- c("HRSL", "LandScan", "WorldPop")
+  pop_scatter(
+    c(the_three, "HRSL", "WorldPop"), c(rep("coarse", 3), rep("fine", 2)),
+    density_label, "A", maximum1k)
+  legend("topleft", legend =  the_three, col = colors[the_three],
+             lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
+}
+scatter1k_together()
 ```
 
 ```{r plot_landscan_density}
-pop_scatter(
+scatter1k_ls <- function() pop_scatter(
   "LandScan", "coarse",
   density_label, "B) LandScan", maximum1k)
+scatter1k_ls()
 ```
 
 ```{r plot_hrsl_density}
-pop_scatter(
+scatter1k_hrsl <- function() pop_scatter(
   rep("HRSL", 2), c("fine", "coarse"),
   density_label, "C) HRSL", maximum1k, background = 1)
+scatter1k_hrsl()
 ```
 
 ```{r plot_woldpop_density}
-pop_scatter(
+scatter1k_wp <- function() pop_scatter(
   rep("WorldPop", 2), c("fine", "coarse"),
   density_label, "D) WorldPop", maximum1k, background = 1)
+scatter1k_wp()
+```
+```{r pop_scatter_hrsl100}
+maximum100 <- 6.2
+pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
+scatter1k_hrsl_count <- function() pop_scatter(
+  rep("HRSL", 1), c("fine"),
+  pop_scatter_label, "F) HRSL, 100x100 m", maximum100, counts = TRUE)
+scatter1k_hrsl_count()
+```
+
+
+```{r pop_scatter_wp100}
+maximum100 <- 6.2
+pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
+scatter1k_wp_count <- function() pop_scatter(
+  rep("WorldPop", 1), c("fine"),
+  pop_scatter_label, "F) WP, 100x100 m", maximum100, counts = TRUE)
+scatter1k_wp_count()
+```
+
+
+```{r scatter1k_figure}
+make_figure <- function() {
+  par(mfrow = c(3, 2), mar = c(5, 4.2, 3, 2))
+  scatter1k_together()
+  scatter1k_ls()
+  scatter1k_hrsl()
+  scatter1k_wp()
+  scatter1k_hrsl_count()
+  scatter1k_wp_count()
+}
+popbioko::save_plot(make_figure, "scatter1k")
+make_figure()
 ```
 
 # Cumulative Maps
@@ -667,6 +853,18 @@ density_kernel_figure <- function(base_power, linewidth = 1, label = "") {
 density_kernel_figure(1.2, 2, "C")
 ```
 
+```{r cdf_pdf}
+cdf_figure <- function() {
+  par(mfrow = c(3, 1), mar = c(5, 5, 3, 2))
+  cdfAreaFigure(2)
+  logPopAreaFigure(2)
+  density_kernel_figure(1.2, 2, "C")
+}
+save_plot(cdf_figure, "CDF")
+cdf_figure()
+```
+
+
 # Proportion, Accuracy, Recall, and Precision
 
 Figure 6 is proportion, accuracy, recall, and precision.
@@ -825,14 +1023,6 @@ pdfAreaFigure()
 ```
 
 
-```{r, eval = FALSE}
-pdf("AccuracyProfile.pdf", height = 8, width = 9)
-par(mar = c(5,5,3,2))
-pdfAreaFigure()
-a <- dev.off(dev.cur())
-```
-
-
 ## Precision
 
 Precision is also known as positive predictive value, so it's the ppv variable.
@@ -917,10 +1107,23 @@ acc_y <- generate_accuracy_y(xx, "acc")
 PPVProfile(acc_y, "Accuracy")
 ```
 ## Recall
-```{r generate_accuracy}
+```{r generate_accuracy2}
 sens_y <- generate_accuracy_y(xx, "sens")
 PPVProfile(sens_y, "Sensitivity")
 ```
+
+```{r area_figure_all}
+area_figure <- function() {
+  par(new, mfrow = c(2, 2))
+  pdfAreaFigure()
+  PPVProfile(acc_y, "Accuracy")
+  PPVProfile(sens_y, "Sensitivity")
+  PPVProfile(ppv_y, "Precision")
+}
+save_plot(area_figure, "AccuracyProfile")
+area_figure()
+```
+
 
 ## Table of ranges
 This is table 3, which has accuracy, recall, and precision for ranges of values.
@@ -941,3 +1144,19 @@ accuracy_as_table <- signif(cbind(acc, sens, ppv), 3)
 rownames(accuracy_as_table) <- rownames(HRSL)
 t(accuracy_as_table)
 ```
+
+# Goodness of Fit Ratio
+
+The goodness of fit ratio (GOFR) is Dave's metric. It's both described in the paper and in
+``Accuracy Metrics'' under the section SSD Profiles. Sean made an important comment
+about the GOFR, that it doesn't use an estimator where he expected one in a statistical model.
+He suggested we look at variance calculations and make the GOFR more similar to that.
+
+We need the admin2 for Bioko in order to recreate a table with GOFR for both the island
+and the four admin2 regions on the island.
+```{r load_admin2}
+admin2 <- sf::st_read(rprojroot::find_package_root_file(
+  "inst/extdata/admin2/bioko_admin2_fulldistricts.shp"))
+tmap::tm_shape(admin2) + tmap::tm_polygons("admin2")
+```
+
