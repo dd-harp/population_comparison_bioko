@@ -1144,3 +1144,19 @@ accuracy_as_table <- signif(cbind(acc, sens, ppv), 3)
 rownames(accuracy_as_table) <- rownames(HRSL)
 t(accuracy_as_table)
 ```
+
+# Goodness of Fit Ratio
+
+The goodness of fit ratio (GOFR) is Dave's metric. It's both described in the paper and in
+``Accuracy Metrics'' under the section SSD Profiles. Sean made an important comment
+about the GOFR, that it doesn't use an estimator where he expected one in a statistical model.
+He suggested we look at variance calculations and make the GOFR more similar to that.
+
+We need the admin2 for Bioko in order to recreate a table with GOFR for both the island
+and the four admin2 regions on the island.
+```{r load_admin2}
+admin2 <- sf::st_read(rprojroot::find_package_root_file(
+  "inst/extdata/admin2/bioko_admin2_fulldistricts.shp"))
+tmap::tm_shape(admin2) + tmap::tm_polygons("admin2")
+```
+
