@@ -322,7 +322,7 @@ The gold data is point data. Grids that are shifted slightly will have
 slightly different values in the tables. So let's shift each major grid
 a bunch of times and see what the values are.
 
-```{error_bounds, eval = FALSE}
+```{r error_bounds, eval = FALSE}
 # With side_len = 10, this can take two hours to run.
 error_dir <- fs::path(params$data_directory, "errors")
 side_len <- 10
@@ -368,7 +368,7 @@ ggplot(csvs, aes(x = pareto_fraction, group = grid)) +
 The maximum pixel value, of the population, not the population density.
 It looks like there's more noise in the coarse grid.
 ```{r plot_raw_max}
-ggplot(csvs, aes(x = maximum, group = grid)) +
+ggplot(csvs, aes(x = max_density, group = grid)) +
   geom_histogram(bins = 200) +
     facet_grid(grid ~ .)
 ```
@@ -376,10 +376,10 @@ Let's look more closely by dividing by the mean in each case.
 We see that they all have about the same uncertainty in the maximum
 when you divide by the mean.
 ```{r plot_max}
-mean_max <- aggregate(maximum ~ grid, FUN = mean, data = csvs)
-names(mean_max)[names(mean_max) %in% "maximum"] <- "mean_max"
+mean_max <- aggregate(max_density ~ grid, FUN = mean, data = csvs)
+names(mean_max)[names(mean_max) %in% "max_density"] <- "mean_max"
 with_mean <- merge(csvs, mean_max)
-with_mean["nmax"] <- with_mean$maximum / with_mean$mean_max
+with_mean["nmax"] <- with_mean$max_density / with_mean$mean_max
 ggplot(with_mean, aes(x = nmax, group = grid)) +
   geom_histogram(bins = 50) +
     facet_grid(grid ~ .)
@@ -441,10 +441,10 @@ zzdf
 ```
 
 ```{r make_columns}
-consider_error <- c("maximum", "empty_percent", "urban_fit", "pareto_fraction")
+consider_error <- c("max_density", "empty_percent", "urban_fit", "pareto_fraction")
 stopifnot(all(consider_error %in% names(csvs)))
 single_ci <- function(col) add_sd_to_column(csvs, col)
-ans_df <- single_ci("maximum")
+ans_df <- single_ci(consider_error[1])
 for (col in consider_error[2:length(consider_error)]) {
   ans_df <- merge(ans_df, single_ci(col))
 }
@@ -573,6 +573,8 @@ pop_scatter <- function(
 
 ```{r all_together}
 density_label <- c("BIMEP Population Density", "Mapped Population Density")
+maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
+
 scatter1k_together <- function() {
   maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
   the_three <- c("HRSL", "LandScan", "WorldPop")
