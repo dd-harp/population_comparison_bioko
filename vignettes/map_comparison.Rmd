@@ -6,6 +6,7 @@ output:
     number_sections: true
     df_print: kable
     toc: true
+    dev: png
 header-includes:
   - \usepackage{palatino}
 # The params block means you can put the data anywhere you like and
@@ -32,6 +33,10 @@ library(spatstat)
 library(viridis)
 
 library(popbioko)
+
+knitr::opts_chunk$set(
+  dpi = 150
+)
 ```
 
 
@@ -284,7 +289,7 @@ cutoffs["density"] <- cutoffs[["urban_per_meter_sq"]] * square_meters_per_pixel.
 cutoffs
 ```
 Plot these with cutoffs to see that the maps are similar.
-```{r make_sure_maps_similar}
+```{r make_sure_maps_similar, dpi = 150}
 plot(maps[[2]] / cutoffs[1, "raw"])
 plot(maps[[2]] / cutoffs[2, "raw"])
 plot(density[[2]] / cutoffs[1, "density"])
@@ -294,25 +299,25 @@ plot(density[[2]] / cutoffs[2, "density"])
 ### Compare across source grids
 This shows all HRSL grid together, then all WorldPop, then all LandScan.
 ```{r}
-as.data.frame(t(show1500_df[show1500_df$grid == "HRSL", ]))
+as.data.frame(t(show1000_df[show1000_df$grid == "HRSL", ]))
 ```
 
 ```{r}
-as.data.frame(t(show1500_df[show1500_df$grid == "WorldPop", ]))
+as.data.frame(t(show1000_df[show1000_df$grid == "WorldPop", ]))
 ```
 
 ```{r}
-as.data.frame(t(show1500_df[show1500_df$grid == "LandScan", ]))
+as.data.frame(t(show1000_df[show1000_df$grid == "LandScan", ]))
 ```
 
 ### Compare across resolutions
 This groups data with the same resolution.
 ```{r}
-as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) < 500, ]))
+as.data.frame(t(show1000_df[as.numeric(show1000_df$resolution) < 500, ]))
 ```
 
 ```{r}
-as.data.frame(t(show1500_df[as.numeric(show1500_df$resolution) > 500, ]))
+as.data.frame(t(show1000_df[as.numeric(show1000_df$resolution) > 500, ]))
 ```
 
 ## Error Bounds
@@ -345,14 +350,14 @@ csvs <- do.call(
 
 I'm curious how much urban fit varies. What I see is that the mean doesn't change much but
 the more coarse grids have a larger standard deviation.
-```{r plot_urban_fit}
+```{r plot_urban_fit, dpi = 150}
 ggplot(csvs, aes(x = urban_fit, group = grid)) +
   geom_histogram(bins = 50) +
     facet_grid(grid ~ .)
 ```
 The percent of NA values is the size of the border around the island. This
 is kind of a control. We see it doesn't vary a lot.
-```{r plot_na_percent}
+```{r plot_na_percent, dpi = 150}
 ggplot(csvs, aes(x = na_percent, group = grid)) +
   geom_histogram(bins = 200) +
     facet_grid(grid ~ .)
@@ -360,14 +365,14 @@ ggplot(csvs, aes(x = na_percent, group = grid)) +
 I don't know how I expect pareto fraction to vary as the grid size changes.
 I feel kind of surprised. I think this is a result of having small
 statistics and using a non-statistical estimator.
-```{r plot_pareto_fraction}
+```{r plot_pareto_fraction, dpi = 150}
 ggplot(csvs, aes(x = pareto_fraction, group = grid)) +
   geom_histogram(bins = 200) +
     facet_grid(grid ~ .)
 ```
 The maximum pixel value, of the population, not the population density.
 It looks like there's more noise in the coarse grid.
-```{r plot_raw_max}
+```{r plot_raw_max, dpi = 150}
 ggplot(csvs, aes(x = max_density, group = grid)) +
   geom_histogram(bins = 200) +
     facet_grid(grid ~ .)
@@ -375,7 +380,7 @@ ggplot(csvs, aes(x = max_density, group = grid)) +
 Let's look more closely by dividing by the mean in each case.
 We see that they all have about the same uncertainty in the maximum
 when you divide by the mean.
-```{r plot_max}
+```{r plot_max, dpi = 150}
 mean_max <- aggregate(max_density ~ grid, FUN = mean, data = csvs)
 names(mean_max)[names(mean_max) %in% "max_density"] <- "mean_max"
 with_mean <- merge(csvs, mean_max)
@@ -502,7 +507,7 @@ log_offset <- function(offset) {
 }
 ```
 
-```{r plot_all_together}
+```{r plot_all_together, dpi = 150}
 logoff <- log_offset(1)
 symbol_size <- c(0.5, 0.25)
 names(symbol_size) <- c("coarse", "fine")
@@ -571,7 +576,7 @@ pop_scatter <- function(
 }
 ```
 
-```{r all_together}
+```{r all_together, dpi = 150}
 density_label <- c("BIMEP Population Density", "Mapped Population Density")
 maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
 
@@ -587,27 +592,27 @@ scatter1k_together <- function() {
 scatter1k_together()
 ```
 
-```{r plot_landscan_density}
+```{r plot_landscan_density, dpi = 150}
 scatter1k_ls <- function() pop_scatter(
   "LandScan", "coarse",
   density_label, "B) LandScan", maximum1k)
 scatter1k_ls()
 ```
 
-```{r plot_hrsl_density}
+```{r plot_hrsl_density, dpi = 150}
 scatter1k_hrsl <- function() pop_scatter(
   rep("HRSL", 2), c("fine", "coarse"),
   density_label, "C) HRSL", maximum1k, background = 1)
 scatter1k_hrsl()
 ```
 
-```{r plot_woldpop_density}
+```{r plot_woldpop_density, dpi = 150}
 scatter1k_wp <- function() pop_scatter(
   rep("WorldPop", 2), c("fine", "coarse"),
   density_label, "D) WorldPop", maximum1k, background = 1)
 scatter1k_wp()
 ```
-```{r pop_scatter_hrsl100}
+```{r pop_scatter_hrsl100, dpi = 150}
 maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
 scatter1k_hrsl_count <- function() pop_scatter(
@@ -617,7 +622,7 @@ scatter1k_hrsl_count()
 ```
 
 
-```{r pop_scatter_wp100}
+```{r pop_scatter_wp100, dpi = 150}
 maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
 scatter1k_wp_count <- function() pop_scatter(
@@ -627,7 +632,7 @@ scatter1k_wp_count()
 ```
 
 
-```{r scatter1k_figure}
+```{r scatter1k_figure, dpi = 150}
 make_figure <- function() {
   par(mfrow = c(3, 2), mar = c(5, 4.2, 3, 2))
   scatter1k_together()
@@ -676,7 +681,7 @@ lines_for_datasets <- function(datasets, linewidth) {
 
 
 
-```{r cumulative_area}
+```{r cumulative_area, dpi = 150}
 cdfAreaLines <- function(H, source, resolution, linewidth = 2) {
   H <- sort(H)
   area <-  c(1:length(H)) / length(H)
@@ -714,7 +719,7 @@ cdfAreaFigure <- function(llwd = 1, label = "") {
 cdfAreaFigure(2)
 ```
 
-```{r}
+```{r, dpi = 150}
 cdfDens <- function(H, log_base) {
   H <- sort(H)
   mx <- ceiling(log(max(H), base = log_base))
@@ -780,7 +785,7 @@ logPopAreaFigure(2)
 ```
 
 Now the third part of Figure 5, a density plot that is just density, not cumulative.
-```{r density_bins}
+```{r density_bins, dpi = 150}
 log_density <- function(H, base_power = 2) {
   H <- H[!is.na(H)]
   c2 <- ceiling(max(log(H[H > 0], base = base_power)))
@@ -853,7 +858,7 @@ density_kernel_figure <- function(base_power, linewidth = 1, label = "") {
 density_kernel_figure(1.2, 2, "C")
 ```
 
-```{r cdf_pdf}
+```{r cdf_pdf, dpi = 150}
 cdf_figure <- function() {
   par(mfrow = c(3, 1), mar = c(5, 5, 3, 2))
   cdfAreaFigure(2)
@@ -964,7 +969,7 @@ example_data <- proportion_data(c(1, 50, 250, 1000))
 ```
 
 
-```{r}
+```{r, dpi = 150}
 #' Make shaded backgrounds for all four figures.
 #' @param splits The sides of the boxes, where colors change.
 make_boxes <- function(splits) {
@@ -1078,7 +1083,7 @@ generate_accuracy_y <- function(xx, measure) {
 ppv_y <- generate_accuracy_y(xx, "ppv")
 ```
 
-```{r}
+```{r, dpi = 150}
 PPVProfile <- function(ppv_y, name, lb = "") {
   plot(
     vector(mode = "numeric", length = 0),
@@ -1102,17 +1107,17 @@ PPVProfile(ppv_y, "Precision")
 ```
 ## Accuracy
 
-```{r generate_accuracy}
+```{r generate_accuracy, dpi = 150}
 acc_y <- generate_accuracy_y(xx, "acc")
 PPVProfile(acc_y, "Accuracy")
 ```
 ## Recall
-```{r generate_accuracy2}
+```{r generate_accuracy2, dpi = 150}
 sens_y <- generate_accuracy_y(xx, "sens")
 PPVProfile(sens_y, "Sensitivity")
 ```
 
-```{r area_figure_all}
+```{r area_figure_all, dpi = 150}
 area_figure <- function() {
   par(new, mfrow = c(2, 2))
   pdfAreaFigure()
@@ -1154,9 +1159,59 @@ He suggested we look at variance calculations and make the GOFR more similar to 
 
 We need the admin2 for Bioko in order to recreate a table with GOFR for both the island
 and the four admin2 regions on the island.
-```{r load_admin2}
-admin2 <- sf::st_read(rprojroot::find_package_root_file(
-  "inst/extdata/admin2/bioko_admin2_fulldistricts.shp"))
-tmap::tm_shape(admin2) + tmap::tm_polygons("admin2")
+```{r load_admin2, results = "hide", message = FALSE}
+# The input map is in UTM, so we transform it to lat-long in order to agree
+# with the raster coordinates of all rasters.
+admin2_sf <- sf::st_transform(sf::st_read(rprojroot::find_package_root_file(
+  "inst/extdata/admin2/bioko_admin2_fulldistricts.shp")),
+  raster::crs(maps[1][[1]]))
+admin2_st <- as(st_geometry(admin2_sf), "Spatial")
+admin2_st_df <- as(admin2_sf[, "OBJECTID"], "Spatial")
+tmap::tm_shape(admin2_sf) + tmap::tm_polygons("admin2")
+```
+The GOFR itself is Sum-of-squared-errors divided by variance. Let's calculate that.
+```{r whole_island_gofr}
+# For each grid and resolution, there should be a map and a BIMEP version of that map.
+admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
+# If these are out of order, then the names in admin_names are in the wrong order.
+stopifnot(admin2_sf$OBJECTID == 1:4)
+gofr <- unique(files_df[, c("grid", "resolution")])
+rownames(gofr) <- paste(gofr$grid, gofr$resolution)
+gofr$GOFR <- numeric(nrow(gofr))
+gofr$Baney <- numeric(nrow(gofr))
+gofr$Malabo <- numeric(nrow(gofr))
+gofr$Luba <- numeric(nrow(gofr))
+gofr$Riaba <- numeric(nrow(gofr))
+
+gofr_of_maps <- function(pops_map, pops_bimep) {
+  pops_bimep <- pops_bimep / sum(pops_bimep, na.rm = TRUE)
+  pops_map <- pops_map / sum(pops_map, na.rm = TRUE)
+  pixel_cnt <- sum(is.finite(pops_map))
+  # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
+  pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE) / pixel_cnt
+  pixel_error / var(pops_bimep, na.rm = TRUE)
+}
+
+for (gofr_make_idx in 1:nrow(gofr)) {
+  gofr_grid <- gofr[gofr_make_idx, "grid"]
+  gofr_resolution <- gofr[gofr_make_idx, "resolution"]
+  gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
+  pops_bimep <- raster::getValues(maps[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]])
+  compare_map <- maps[gofr_pair_df[gofr_pair_df$source != "BIMEP", "name"]][[1]]
+  pops_map <- raster::getValues(compare_map)
+  stopifnot(length(pops_bimep) == length(pops_map))
+  
+  gofr$GOFR[gofr_make_idx] <- gofr_of_maps(pops_bimep, pops_map)
+  
+  # Iterate through the four admin2 by ID.
+  segmented <- raster::getValues(raster::rasterize(
+    admin2_st, compare_map, field = admin2_sf$OBJECTID))
+  for (adm2_idx in 1:length(admin_names)) {
+    sub_bimep <- pops_bimep[segmented == adm2_idx]
+    sub_pops <- pops_map[segmented == adm2_idx]
+    gofr[[admin_names[adm2_idx]]][gofr_make_idx] <- gofr_of_maps(sub_bimep, sub_pops)
+  }
+}
+gofr
 ```
 
