@@ -1149,6 +1149,8 @@ accuracy_as_table <- signif(cbind(acc, sens, ppv), 3)
 rownames(accuracy_as_table) <- rownames(HRSL)
 t(accuracy_as_table)
 ```
+Remember that you can turn this into LaTex using the command
+`knitr::kable(t(accuracy_as_table), format = "latex")`.
 
 # Goodness of Fit Ratio
 
@@ -1169,8 +1171,16 @@ admin2_st <- as(st_geometry(admin2_sf), "Spatial")
 admin2_st_df <- as(admin2_sf[, "OBJECTID"], "Spatial")
 tmap::tm_shape(admin2_sf) + tmap::tm_polygons("admin2")
 ```
-The GOFR itself is Sum-of-squared-errors divided by variance. Let's calculate that.
+The GOFR itself is Sum-of-squared-errors divided by variance. We want to calculate this for
+the whole island and for districts on the island. Each GOFR calculation takes two
+maps as input, a source map, such as HRSL-fine, and a comparison map, which would
+be BIMEP-on-HRSL-fine-grid. So we will iterate through source maps, taking the source
+and the comparison map.
 ```{r whole_island_gofr}
+# Whether to divide pixels by the sum of all pixels.
+normalize_gofr <- TRUE
+# Set to maps or density for original map or density surface.
+gofr_map_type <- maps
 # For each grid and resolution, there should be a map and a BIMEP version of that map.
 admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
 # If these are out of order, then the names in admin_names are in the wrong order.
@@ -1183,9 +1193,11 @@ gofr$Malabo <- numeric(nrow(gofr))
 gofr$Luba <- numeric(nrow(gofr))
 gofr$Riaba <- numeric(nrow(gofr))
 
-gofr_of_maps <- function(pops_map, pops_bimep) {
-  pops_bimep <- pops_bimep / sum(pops_bimep, na.rm = TRUE)
-  pops_map <- pops_map / sum(pops_map, na.rm = TRUE)
+gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
+  if (normalize) {
+    pops_bimep <- pops_bimep / sum(pops_bimep, na.rm = TRUE)
+    pops_map <- pops_map / sum(pops_map, na.rm = TRUE)
+  }
   pixel_cnt <- sum(is.finite(pops_map))
   # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
   pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE) / pixel_cnt
@@ -1196,12 +1208,13 @@ for (gofr_make_idx in 1:nrow(gofr)) {
   gofr_grid <- gofr[gofr_make_idx, "grid"]
   gofr_resolution <- gofr[gofr_make_idx, "resolution"]
   gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
-  pops_bimep <- raster::getValues(maps[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]])
-  compare_map <- maps[gofr_pair_df[gofr_pair_df$source != "BIMEP", "name"]][[1]]
+  pops_bimep <- raster::getValues(gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]])
+  compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source != "BIMEP", "name"]][[1]]
   pops_map <- raster::getValues(compare_map)
   stopifnot(length(pops_bimep) == length(pops_map))
   
-  gofr$GOFR[gofr_make_idx] <- gofr_of_maps(pops_bimep, pops_map)
+  # GOFR for the whole island.
+  gofr$GOFR[gofr_make_idx] <- gofr_of_maps(pops_bimep, pops_map, normalize_gofr)
   
   # Iterate through the four admin2 by ID.
   segmented <- raster::getValues(raster::rasterize(
@@ -1209,9 +1222,53 @@ for (gofr_make_idx in 1:nrow(gofr)) {
   for (adm2_idx in 1:length(admin_names)) {
     sub_bimep <- pops_bimep[segmented == adm2_idx]
     sub_pops <- pops_map[segmented == adm2_idx]
-    gofr[[admin_names[adm2_idx]]][gofr_make_idx] <- gofr_of_maps(sub_bimep, sub_pops)
+    gofr[[admin_names[adm2_idx]]][gofr_make_idx] <- gofr_of_maps(sub_bimep, sub_pops, normalize_gofr)
   }
 }
 gofr
 ```
+The incoming maps are HRSL fine, WorldPop fine, and LandScan coarse.
+
+Let's remind ourselves what the WorldPop looks like, because those numbers are huge.
+```{r plot_wp_again}
+plot(maps[["WorldPop on WorldPop fine"]])
+```
+# Map Plots
+We need a couple of pretty plots.
+```{r quad_plot}
+library(tmap)
+# I made this outline from the admin2 borders using QGis b/c the file
+# made with sf::st_combine wasn't valid.
+bbioko <- sf::st_transform(sf::st_read(rprojroot::find_package_root_file(
+  "inst/extdata/Bioko_outline.shp")),
+  raster::crs(maps[1][[1]]))
+qleg <- FALSE
+qbreaks <- c(0, 10, 100, 1000, 10000, 100000)
+qnames <- c("0", "1", "2", "3", "4")
+qpal <- c("#BBBBBBFF", viridis(4))
+# raster::projection(density[["BIMEP on HRSL coarse"]]) <- "+proj=longlat +datum=WGS84 +no_defs"
+# tmap::tm_shape(bbioko) + tmap::tm_borders(col = "black", lwd = 1) +
+qbm <- tm_shape(density[["BIMEP on HRSL coarse"]]) +
+  tm_raster(title = "log10 pop", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "BIMEP", frame = FALSE) +
+  tm_legend(show = TRUE)
+
+qwp <- tm_shape(density[["WorldPop on WorldPop coarse"]]) +
+  tm_raster(title = "qwp", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "WorldPop", frame = FALSE) + tm_legend(show = qleg)
+
+qls <- tm_shape(density[["LandScan on LandScan coarse"]]) +
+  tm_raster(title = "qls", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "LandScan", frame = FALSE) + tm_legend(show = qleg)
+
+qhrsl <- tm_shape(density[["HRSL on HRSL coarse"]]) +
+  tm_raster(title = "qhrsl", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "HRSL", frame = FALSE) + tm_legend(show = qleg)
+
+quadmap <- tmap_arrange(qbm, qwp, qls, qhrsl, ncol = 2, nrow = 2)
+tmap_save(quadmap, "islandquad.png")
+tmap_save(quadmap, "islandquad.pdf")
+quadmap
+```
+
 
