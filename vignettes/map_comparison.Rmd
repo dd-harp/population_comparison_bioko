@@ -1177,10 +1177,7 @@ maps as input, a source map, such as HRSL-fine, and a comparison map, which woul
 be BIMEP-on-HRSL-fine-grid. So we will iterate through source maps, taking the source
 and the comparison map.
 ```{r whole_island_gofr}
-# Whether to divide pixels by the sum of all pixels.
-normalize_gofr <- TRUE
-# Set to maps or density for original map or density surface.
-gofr_map_type <- maps
+calculate_gofr <- function(normalize_gofr, gofr_map_type) {
 # For each grid and resolution, there should be a map and a BIMEP version of that map.
 admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
 # If these are out of order, then the names in admin_names are in the wrong order.
@@ -1201,7 +1198,7 @@ gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
   pixel_cnt <- sum(is.finite(pops_map))
   # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
   pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE) / pixel_cnt
-  pixel_error / var(pops_bimep, na.rm = TRUE)
+  pixel_error / var(pops_map, na.rm = TRUE)
 }
 
 for (gofr_make_idx in 1:nrow(gofr)) {
@@ -1226,8 +1223,22 @@ for (gofr_make_idx in 1:nrow(gofr)) {
   }
 }
 gofr
+}
+# Set to maps or density for original map or density surface.
+gofr_map_type <- maps
+gofr_abs <- calculate_gofr(FALSE, gofr_map_type)
+gofr_norm <- calculate_gofr(TRUE, gofr_map_type)
+choose <- c(2, 3, 6)
+cols <- c("grid", "resolution", "GOFR", "Baney", "Luba", "Malabo", "Riaba")
+gofr_table <- rbind(gofr_abs[choose, cols], gofr_norm[choose, cols])
+gofr_table
 ```
 The incoming maps are HRSL fine, WorldPop fine, and LandScan coarse.
+```{r gofr_table}
+# add format = "latex"
+knitr::kable(t(gofr_table[, !names(gofr_table) %in% c("resolution")]), digits = 4)
+```
+
 
 Let's remind ourselves what the WorldPop looks like, because those numbers are huge.
 ```{r plot_wp_again}
@@ -1271,4 +1282,41 @@ tmap_save(quadmap, "islandquad.pdf")
 quadmap
 ```
 
+```{r by_extent}
+library(tmap)
+bcrop <- raster::extent(c(8.685, 8.85, 3.65, 3.80))  # for maps, not densities.
+#bcrop <- raster::extent(c(440000, 490000, 350000, 424000))
+bmaps <- maps[c(3, 12, 4)]  # bimep, worldpop, hrsl
+bbreaks_log <- seq(0, 2, .25)
+bbreaks <- 10^bbreaks_log
+bnames <- as.character(bbreaks_log[1:(length(bbreaks_log) - 1)])
+bnames[seq(2, length(bnames), 2)] <- ""
+bpal <- c("#BBBBBBFF", viridis(length(bbreaks) - 1))
+bp1 <- tm_shape(raster::crop(bmaps[1][[1]], bcrop)) +
+  tm_raster(title = "BIMEP", palette = bpal, breaks = bbreaks, labels = bnames) +
+  tm_legend(show = FALSE) +
+  tm_layout(title = "A", frame = FALSE)
+bp2 <- tm_shape(raster::crop(bmaps[2][[1]], bcrop)) +
+  tm_raster(title = "WorldPop", palette = bpal, breaks = bbreaks, labels = bnames) +
+  tm_legend(show = FALSE) +
+  tm_layout(title = "B", frame = FALSE)
+bp3 <- tm_shape(raster::crop(bmaps[3][[1]], bcrop)) +
+  tm_raster(title = "HRSL", palette = bpal, breaks = bbreaks, labels = bnames) +
+  tm_legend(show = FALSE) +
+  tm_layout(title = "C", frame = FALSE)
+
+bleg <- tm_shape(cropped) +
+  tm_raster(title = "log10 pop", palette = bpal, breaks = bbreaks, labels = bnames) + 
+  tm_legend(legend.only = TRUE, position = c("center", "top"), title.size = 2, text.size = 1.5)
+closeup <- tmap_arrange(bp1, bp2, bp3, bleg, ncol = 2, nrow = 2)
+tmap_save(closeup, "closeup.png")
+tmap_save(closeup, "closeup.pdf")
+closeup
+```
+
+```{r}
+bcrop <- raster::extent(c(465000, 490000, 400000, 424000))
+bmaps <- density[c(3, 12, 4)]  # bimep, worldpop, hrsl
+raster::plot(raster::crop(bmaps[1][[1]], bcrop))
+```
 
