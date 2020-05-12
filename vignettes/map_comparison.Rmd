@@ -1190,6 +1190,7 @@ gofr$Malabo <- numeric(nrow(gofr))
 gofr$Luba <- numeric(nrow(gofr))
 gofr$Riaba <- numeric(nrow(gofr))
 
+# This is the GOFR equation. This defines it.
 gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
   if (normalize) {
     pops_bimep <- pops_bimep / sum(pops_bimep, na.rm = TRUE)
@@ -1226,16 +1227,16 @@ gofr
 }
 # Set to maps or density for original map or density surface.
 gofr_map_type <- maps
-gofr_abs <- calculate_gofr(FALSE, gofr_map_type)
-gofr_norm <- calculate_gofr(TRUE, gofr_map_type)
+gofr_absolute <- calculate_gofr(FALSE, gofr_map_type)
+gofr_normalized <- calculate_gofr(TRUE, gofr_map_type)
 choose <- c(2, 3, 6)
 cols <- c("grid", "resolution", "GOFR", "Baney", "Luba", "Malabo", "Riaba")
-gofr_table <- rbind(gofr_abs[choose, cols], gofr_norm[choose, cols])
+gofr_table <- rbind(gofr_absolute[choose, cols], gofr_normalized[choose, cols])
 gofr_table
 ```
 The incoming maps are HRSL fine, WorldPop fine, and LandScan coarse.
-```{r gofr_table}
-# add format = "latex"
+```{r gofr_table, eval = FALSE}
+# This is here to show how to get the table into LaTeX. Add format = "latex" to the line below.
 knitr::kable(t(gofr_table[, !names(gofr_table) %in% c("resolution")]), digits = 4)
 ```
 
