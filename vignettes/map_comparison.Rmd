@@ -1193,7 +1193,7 @@ gofr$Luba <- numeric(nrow(gofr))
 gofr$Riaba <- numeric(nrow(gofr))
 
 # This is the GOFR equation. This defines it.
-gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
+gofr_of_maps_gold_variance <- function(pops_map, pops_bimep, normalize = FALSE) {
   if (normalize) {
     pops_bimep <- pops_bimep / sum(pops_bimep, na.rm = TRUE)
     pops_map <- pops_map / sum(pops_map, na.rm = TRUE)
@@ -1201,7 +1201,19 @@ gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
   pixel_cnt <- sum(is.finite(pops_map))
   # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
   pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE) / pixel_cnt
-  pixel_error / var(pops_map, na.rm = TRUE)
+  pixel_error / var(pops_bimep, na.rm = TRUE)
+}
+
+# This is the GOFR equation. This defines it.
+gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
+  if (normalize) {
+    pops_bimep <- pops_bimep / sum(pops_bimep, na.rm = TRUE)
+    pops_map <- pops_map / sum(pops_map, na.rm = TRUE)
+  }
+  pixel_cnt <- sum(is.finite(pops_map))
+  # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
+  pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE)
+  pixel_error / sum((pops_map - mean(pops_bimep, na.rm = TRUE))^2, na.rm = TRUE)
 }
 
 for (gofr_make_idx in 1:nrow(gofr)) {
