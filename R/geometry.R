@@ -150,7 +150,7 @@ bimep_population_as_points <- function(local_directory = "inst/extdata") {
 #' @export
 bimep_on_grid <- function(grid, bioko_sf, local_directory = "inst/extdata") {
   features <- read_bimep_point_data(local_directory)
-  geolocated_on_grid(grid, features, bioko_sf, local_directory)
+  geolocated_on_grid(grid, features, bioko_sf)
 }
 
 
