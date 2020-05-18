@@ -163,12 +163,11 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
 }
 
 #' This makes a dataframe with both unnormalized and normalized gofr, ready to print.
-gofr_table <- function(gofr_map_type, gofr_algorithm) {
+gofr_table <- function(gofr_map_type, gofr_algorithm, map_choice) {
   gofr_absolute <- calculate_gofr(FALSE, gofr_map_type, gofr_algorithm)
   gofr_normalized <- calculate_gofr(TRUE, gofr_map_type, gofr_algorithm)
-  choose <- c(2, 3, 6)
   cols <- c("grid", "resolution", "GOFR", "Baney", "Luba", "Malabo", "Riaba")
-  gofr_table <- rbind(gofr_absolute[choose, cols], gofr_normalized[choose, cols])
+  gofr_table <- rbind(gofr_absolute[map_choice, cols], gofr_normalized[map_choice, cols])
   gofr_table
 }
 ```
@@ -213,29 +212,71 @@ gofr_of_maps_observed_variance <- function(pops_map, pops_bimep, normalize = FAL
   pixel_error / var(pops_map, na.rm = TRUE)
 }
 
+original_resolutions <- c(2, 3, 6)
+coarse_resolutions <- c(1, 3, 5)
+```
+
+### Maps with Original Resolutions, some fine, some coarse
+
+#### Maps of counts
+
+```{r using_original_resolutions}
 # Set to maps or density for original map or density surface.
-gofr_table(maps, gofr_of_maps_original)
+gofr_table(maps, gofr_of_maps_original, original_resolutions)
 ```
 ```{r divide_by_gold_variance}
-gofr_table(maps, gofr_of_maps_gold_variance)
+gofr_table(maps, gofr_of_maps_gold_variance, original_resolutions)
 ```
 
 ```{r divide_by_obs_variance}
-gofr_table(maps, gofr_of_maps_observed_variance)
+gofr_table(maps, gofr_of_maps_observed_variance, original_resolutions)
 ```
 
+#### Maps of densities
 Now do the same for densities.
 ```{r density_original_gofr}
-gofr_table(density, gofr_of_maps_original)
+gofr_table(density, gofr_of_maps_original, original_resolutions)
 ```
 
 ```{r density_divide_by_gold_variance}
-gofr_table(density, gofr_of_maps_gold_variance)
+gofr_table(density, gofr_of_maps_gold_variance, original_resolutions)
 ```
 
 ```{r density_divide_by_obs_variance}
-gofr_table(density, gofr_of_maps_observed_variance)
+gofr_table(density, gofr_of_maps_observed_variance, original_resolutions)
 ```
+
+
+### Maps with coarse resolutions
+
+#### Maps of counts
+
+```{r again_coarse}
+gofr_table(maps, gofr_of_maps_original, coarse_resolutions)
+```
+
+```{r divide_by_gold_variance_coarse}
+gofr_table(maps, gofr_of_maps_gold_variance, coarse_resolutions)
+```
+
+```{r divide_by_obs_variance_coarse}
+gofr_table(maps, gofr_of_maps_observed_variance, coarse_resolutions)
+```
+
+#### Maps of densities
+Now do the same for densities.
+```{r density_original_gofr_coarse}
+gofr_table(density, gofr_of_maps_original, coarse_resolutions)
+```
+
+```{r density_divide_by_gold_variance_coarse}
+gofr_table(density, gofr_of_maps_gold_variance, coarse_resolutions)
+```
+
+```{r density_divide_by_obs_variance_coarse}
+gofr_table(density, gofr_of_maps_observed_variance, coarse_resolutions)
+```
+
 # SSD Profiles (From Dave's Notes)
 
 This section is included from the Accuracy Metrics vignette. I don't have the data
