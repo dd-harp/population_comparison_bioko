@@ -57,20 +57,20 @@ We can use either population maps or density maps here. Use $\langle H\rangle$
 for the mean of the gold standard and $\langle \hat{H}\rangle$ for the mean of the
 population map.
 $$
-  GOFR = \frac{\sum_x(\hat{H}(x) - H(x))^2}{\sum_x(\hat{H}(x) - \langle H\rangle)}
+  GOFR = \frac{\sum_x(\hat{H}(x) - H(x))^2}{\sum_x(\hat{H}(x) - \langle H\rangle)^2}
 $$
 ## Normalize by Gold Standard Variance
 I thought it was easier to say that this is sum of squared errors per pixel divided
 by gold standard variance.
 $$
-  GOFR = \frac{\sum_x(\hat{H}(x) - H(x))^2}{\sum_x(H(x) - \langle H\rangle)}
+  GOFR = \frac{\sum_x(\hat{H}(x) - H(x))^2}{\sum_x(H(x) - \langle H\rangle)^2}
 $$
 
 
 ## Normalize by Observed Variance
 Or normalize by the map variance, if that works. The numbers look less huge.
 $$
-  GOFR = \frac{\sum_x(\hat{H}(x) - H(x))^2}{\sum_x(\hat{H}(x) - \langle \hat{H}\rangle)}
+  GOFR = \frac{\sum_x(\hat{H}(x) - H(x))^2}{\sum_x(\hat{H}(x) - \langle \hat{H}\rangle)^2}
 $$
 # Look at Numbers
 
@@ -119,11 +119,7 @@ tmap::tm_shape(admin2_sf) + tmap::tm_polygons("admin2")
 These functions run the calculations. We put this here to get it out of the way.
 It's all about intersecting maps and organizing the data.
 ```{r whole_island_gofr}
-calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
-  # For each grid and resolution, there should be a map and a BIMEP version of that map.
-  admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
-  # If these are out of order, then the names in admin_names are in the wrong order.
-  stopifnot(admin2_sf$OBJECTID == 1:4)
+blank_gofr_list <- function() {
   gofr <- unique(files_df[, c("grid", "resolution")])
   rownames(gofr) <- paste(gofr$grid, gofr$resolution)
   gofr$GOFR <- numeric(nrow(gofr))
@@ -131,18 +127,32 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
   gofr$Malabo <- numeric(nrow(gofr))
   gofr$Luba <- numeric(nrow(gofr))
   gofr$Riaba <- numeric(nrow(gofr))
+  gofr
+}
+
+calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
+  # For each grid and resolution, there should be a map and a BIMEP version of that map.
+  admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
+  # If these are out of order, then the names in admin_names are in the wrong order.
+  stopifnot(admin2_sf$OBJECTID == 1:4)
+  gofr <- blank_gofr_list()
+  sse <- blank_gofr_list()
   
   for (gofr_make_idx in 1:nrow(gofr)) {
     gofr_grid <- gofr[gofr_make_idx, "grid"]
     gofr_resolution <- gofr[gofr_make_idx, "resolution"]
     gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
-    pops_bimep <- raster::getValues(gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]])
+    pops_bimep <- raster::getValues(
+      gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]]
+      )
     compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source != "BIMEP", "name"]][[1]]
     pops_map <- raster::getValues(compare_map)
     stopifnot(length(pops_bimep) == length(pops_map))
     
     # GOFR for the whole island.
-    gofr$GOFR[gofr_make_idx] <- gofr_algorithm(pops_bimep, pops_map, normalize_gofr)
+    island <- gofr_algorithm(pops_bimep, pops_map, normalize_gofr)
+    gofr$GOFR[gofr_make_idx] <- island$num / island$den
+    sse$GOFR[gofr_make_idx] <- island$num
     
     # Iterate through the four admin2 by ID.
     is_lonlat <- raster::isLonLat(raster::crs(gofr_map_type[[1]][[1]]))
@@ -156,10 +166,13 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
     for (adm2_idx in 1:length(admin_names)) {
       sub_bimep <- pops_bimep[segmented == adm2_idx]
       sub_pops <- pops_map[segmented == adm2_idx]
-      gofr[[admin_names[adm2_idx]]][gofr_make_idx] <- gofr_algorithm(sub_bimep, sub_pops, normalize_gofr)
+      store_name <- admin_names[adm2_idx]
+      gofr_admin <- gofr_algorithm(sub_bimep, sub_pops, normalize_gofr)
+      gofr[[store_name]][gofr_make_idx] <- island$num / gofr_admin$den
+      sse[[store_name]][gofr_make_idx] <- gofr_admin$num
     }
   }
-  gofr
+  list(gofr = gofr, sse = sse)
 }
 
 #' This makes a dataframe with both unnormalized and normalized gofr, ready to print.
@@ -167,8 +180,14 @@ gofr_table <- function(gofr_map_type, gofr_algorithm, map_choice) {
   gofr_absolute <- calculate_gofr(FALSE, gofr_map_type, gofr_algorithm)
   gofr_normalized <- calculate_gofr(TRUE, gofr_map_type, gofr_algorithm)
   cols <- c("grid", "resolution", "GOFR", "Baney", "Luba", "Malabo", "Riaba")
-  gofr_table <- rbind(gofr_absolute[map_choice, cols], gofr_normalized[map_choice, cols])
-  gofr_table
+  gofr_table <- rbind(
+    gofr_absolute$sse[map_choice, cols],
+    gofr_absolute$gofr[map_choice, cols],
+    gofr_normalized$gofr[map_choice, cols]
+    )
+  kinds <- rep(c("SSE", "absolute", "normed"), each = 3)
+  row.names(gofr_table) <- paste(kinds, gofr_table$grid)
+  gofr_table[, !names(gofr_table) %in% "grid"]
 }
 ```
 
@@ -185,7 +204,10 @@ gofr_of_maps_original <- function(pops_map, pops_bimep, normalize = FALSE) {
   pixel_cnt <- sum(is.finite(pops_map))
   # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
   pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE)
-  pixel_error / sum((pops_map - mean(pops_bimep, na.rm = TRUE))^2, na.rm = TRUE)
+  list(
+    num = pixel_error,
+    den = sum((pops_map - mean(pops_bimep, na.rm = TRUE))^2, na.rm = TRUE)
+  )
 }
 
 # This divides sum of squared error by variance of the gold standard
@@ -196,8 +218,11 @@ gofr_of_maps_gold_variance <- function(pops_map, pops_bimep, normalize = FALSE) 
   }
   pixel_cnt <- sum(is.finite(pops_map))
   # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
-  pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE) / pixel_cnt
-  pixel_error / var(pops_bimep, na.rm = TRUE)
+  pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE)
+  list(
+    num = pixel_error,
+    den = var(pops_bimep, na.rm = TRUE) * pixel_cnt
+  )
 }
 
 # This divides sum of squared error by variance of the map under observation.
@@ -208,8 +233,11 @@ gofr_of_maps_observed_variance <- function(pops_map, pops_bimep, normalize = FAL
   }
   pixel_cnt <- sum(is.finite(pops_map))
   # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
-  pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE) / pixel_cnt
-  pixel_error / var(pops_map, na.rm = TRUE)
+  pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE)
+  list(
+    num = pixel_error,
+    den = var(pops_map, na.rm = TRUE) * pixel_cnt
+  )
 }
 
 original_resolutions <- c(2, 3, 6)
@@ -219,6 +247,12 @@ coarse_resolutions <- c(1, 3, 5)
 ### Maps with Original Resolutions, some fine, some coarse
 
 #### Maps of counts
+
+These tables:
+
+1. Three rows of un-normalized sum-of-squared errors.
+2. Three rows of GOFR using absolute values.
+3. Three rows of GOFR using normalized values.
 
 ```{r using_original_resolutions}
 # Set to maps or density for original map or density surface.
