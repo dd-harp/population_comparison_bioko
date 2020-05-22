@@ -110,7 +110,8 @@ admin2_projected_sf <- sf::st_read(rprojroot::find_package_root_file(
 admin2_projected_st <- as(sf::st_geometry(admin2_projected_sf), "Spatial")
 admin2_sf <- sf::st_transform(admin2_projected_sf, raster::crs(maps[1][[1]]))
 admin2_st <- as(sf::st_geometry(admin2_sf), "Spatial")
-admin2_st_df <- as(admin2_sf[, "OBJECTID"], "Spatial")
+# This associates an index with an admin2 region name.
+admin2_st_df <- as.data.frame(as(admin2_sf[, c("OBJECTID", "admin2")], "Spatial"))
 tmap::tm_shape(admin2_sf) + tmap::tm_polygons("admin2")
 ```
 
@@ -122,19 +123,49 @@ It's all about intersecting maps and organizing the data.
 blank_gofr_list <- function() {
   gofr <- unique(files_df[, c("grid", "resolution")])
   rownames(gofr) <- paste(gofr$grid, gofr$resolution)
-  gofr$GOFR <- numeric(nrow(gofr))
-  gofr$Baney <- numeric(nrow(gofr))
-  gofr$Malabo <- numeric(nrow(gofr))
-  gofr$Luba <- numeric(nrow(gofr))
-  gofr$Riaba <- numeric(nrow(gofr))
+  gofr$Bioko <- numeric(nrow(gofr))
+  # We will calculate GOFR for each admin2, in addition to the whole island.
+  for (admin_idx in 1:nrow(admin2_st_df)) {
+    gofr[[admin2_st_df[admin_idx, "admin2"]]] <- numeric(nrow(gofr))
+  }
   gofr
+}
+
+
+#' Checks that the relative sizes of the rasterized admin units matches
+#' what we expect. That way we know they aren't ordered by some random 1-4.
+check_rasterize <- function(values) {
+  size_order <- c("Riaba", "Baney", "Malabo", "Luba")
+  id_order <- admin2_st_df[match(size_order, admin2_st_df$admin2), "OBJECTID"]
+  sizes <- unlist(lapply(seq(4), function(x) sum(values == x, na.rm = TRUE)))
+  expected <- sizes[id_order]
+  stopifnot(expected == sort(expected))
+}
+
+
+#' The bimep map should be nearly identical to the pops map in terms
+#' of size and NA location because it was built to be that way.
+check_maps_match <- function(pops_map, pops_bimep, gofr_pair_df) {
+  stopifnot(length(pops_bimep) == length(pops_map))
+  mapna <- is.na(pops_map)
+  bmna <- is.na(pops_bimep)
+  if (any(mapna != bmna)) {
+    print(gofr_pair_df)
+    difference_cnt <- sum(mapna != bmna)
+    total_finite <- length(pops_map) - sum(mapna | bmna)
+    only_map <- sum(mapna & !bmna)
+    only_bimep <- sum(bmna & !mapna)
+    both_na <- sum(mapna & bmna)
+    stop(paste(
+      difference_cnt, "of the NA values don't match out of", total_finite,
+      "with", both_na, "na values of which", only_map, "only in the map and",
+      only_bimep, "in the gold"
+      ))
+  }
 }
 
 calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
   # For each grid and resolution, there should be a map and a BIMEP version of that map.
-  admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
-  # If these are out of order, then the names in admin_names are in the wrong order.
-  stopifnot(admin2_sf$OBJECTID == 1:4)
   gofr <- blank_gofr_list()
   sse <- blank_gofr_list()
   
@@ -142,17 +173,18 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
     gofr_grid <- gofr[gofr_make_idx, "grid"]
     gofr_resolution <- gofr[gofr_make_idx, "resolution"]
     gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
+    stopifnot(nrow(gofr_pair_df) == 2)
     pops_bimep <- raster::getValues(
       gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]]
       )
-    compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source != "BIMEP", "name"]][[1]]
+    compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source == gofr_grid, "name"]][[1]]
     pops_map <- raster::getValues(compare_map)
-    stopifnot(length(pops_bimep) == length(pops_map))
-    
-    # GOFR for the whole island.
+    check_maps_match(pops_map, pops_bimep, gofr_pair_df)
+
+    # Bioko for the whole island.
     island <- gofr_algorithm(pops_bimep, pops_map, normalize_gofr)
-    gofr$GOFR[gofr_make_idx] <- island$num / island$den
-    sse$GOFR[gofr_make_idx] <- island$num
+    gofr$Bioko[gofr_make_idx] <- island$num / island$den
+    sse$Bioko[gofr_make_idx] <- island$num
     
     # Iterate through the four admin2 by ID.
     is_lonlat <- raster::isLonLat(raster::crs(gofr_map_type[[1]][[1]]))
@@ -161,14 +193,17 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
     } else {
       use_map <- admin2_projected_st
     }
+    # Identify pixels by the object that overlaps so we can pull them out below.
     segmented <- raster::getValues(raster::rasterize(
-      use_map, compare_map, field = admin2_sf$OBJECTID))
-    for (adm2_idx in 1:length(admin_names)) {
-      sub_bimep <- pops_bimep[segmented == adm2_idx]
-      sub_pops <- pops_map[segmented == adm2_idx]
-      store_name <- admin_names[adm2_idx]
+      use_map, compare_map, field = admin2_st_df$OBJECTID))
+    check_rasterize(segmented)
+    for (adm2_idx in 1:nrow(admin2_st_df)) {
+      store_name <- admin2_st_df[adm2_idx, "admin2"]
+      adm2_object_id <- admin2_st_df[adm2_idx, "OBJECTID"]
+      sub_bimep <- pops_bimep[segmented == adm2_object_id]
+      sub_pops <- pops_map[segmented == adm2_object_id]
       gofr_admin <- gofr_algorithm(sub_bimep, sub_pops, normalize_gofr)
-      gofr[[store_name]][gofr_make_idx] <- island$num / gofr_admin$den
+      gofr[[store_name]][gofr_make_idx] <- gofr_admin$num / gofr_admin$den
       sse[[store_name]][gofr_make_idx] <- gofr_admin$num
     }
   }
@@ -179,7 +214,7 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
 gofr_table <- function(gofr_map_type, gofr_algorithm, map_choice) {
   gofr_absolute <- calculate_gofr(FALSE, gofr_map_type, gofr_algorithm)
   gofr_normalized <- calculate_gofr(TRUE, gofr_map_type, gofr_algorithm)
-  cols <- c("grid", "resolution", "GOFR", "Baney", "Luba", "Malabo", "Riaba")
+  cols <- c("grid", "resolution", "Bioko", "Baney", "Luba", "Malabo", "Riaba")
   gofr_table <- rbind(
     gofr_absolute$sse[map_choice, cols],
     gofr_absolute$gofr[map_choice, cols],
@@ -210,6 +245,10 @@ gofr_of_maps_original <- function(pops_map, pops_bimep, normalize = FALSE) {
   )
 }
 
+
+relerr <- function(observed, expected) ((observed - expected) / expected)
+
+
 # This divides sum of squared error by variance of the gold standard
 gofr_of_maps_gold_variance <- function(pops_map, pops_bimep, normalize = FALSE) {
   if (normalize) {
@@ -219,9 +258,12 @@ gofr_of_maps_gold_variance <- function(pops_map, pops_bimep, normalize = FALSE) 
   pixel_cnt <- sum(is.finite(pops_map))
   # Ignore NA because they tell us where there is water. Rasters are designed to agree on water location.
   pixel_error <- sum((pops_map - pops_bimep)^2, na.rm = TRUE)
+  sample_variance <- var(pops_bimep, na.rm = TRUE) * (pixel_cnt - 1)
+  similar_variance <- sum((pops_bimep - mean(pops_bimep, na.rm = TRUE))^2, na.rm = TRUE)
+  stopifnot(abs(relerr(similar_variance, sample_variance)) < 1e-4)
   list(
     num = pixel_error,
-    den = var(pops_bimep, na.rm = TRUE) * pixel_cnt
+    den = sample_variance
   )
 }
 
@@ -256,7 +298,9 @@ These tables:
 
 ```{r using_original_resolutions}
 # Set to maps or density for original map or density surface.
-gofr_table(maps, gofr_of_maps_original, original_resolutions)
+gt <- gofr_table(maps, gofr_of_maps_original, original_resolutions)
+(gt[1:3, ])
+gt[4:nrow(gt), ]
 ```
 ```{r divide_by_gold_variance}
 gofr_table(maps, gofr_of_maps_gold_variance, original_resolutions)
@@ -290,7 +334,9 @@ gofr_table(maps, gofr_of_maps_original, coarse_resolutions)
 ```
 
 ```{r divide_by_gold_variance_coarse}
-gofr_table(maps, gofr_of_maps_gold_variance, coarse_resolutions)
+gt <- gofr_table(maps, gofr_of_maps_gold_variance, coarse_resolutions)
+(gt[1:3, ])
+gt[4:nrow(gt), ]
 ```
 
 ```{r divide_by_obs_variance_coarse}
