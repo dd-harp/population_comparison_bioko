@@ -110,6 +110,7 @@ read_bimep_point_data <- function(local_directory = "inst/extdata") {
   )
 }
 
+
 #' Turns each population entry into a lat-long coordinate.
 #'
 #' This reads the `popm.csv` of population at 100m grid points.
@@ -126,7 +127,7 @@ bimep_population_as_points <- function(local_directory = "inst/extdata") {
   projected_cell_center <- lapply(1:nrow(pops), function(idx) {
     sf::st_point(c(pops[idx, "xcoord"], pops[idx, "ycoord"]))
   })
-  utm_projected_crs <- "+proj=utm +zone=32N +ellps=WGS84  +no_defs +units=m +datum=WGS84"
+  utm_projected_crs <- "+proj=utm +zone=32N +ellps=WGS84 +no_defs +units=m +datum=WGS84"
   features <- sf::st_sf(
     st_as_sfc(projected_cell_center),
     pop = pops$pop100,
@@ -149,7 +150,15 @@ bimep_population_as_points <- function(local_directory = "inst/extdata") {
 #'   zero or a pop value on land.
 #' @export
 bimep_on_grid <- function(grid, bioko_sf, local_directory = "inst/extdata") {
-  features <- read_bimep_point_data(local_directory)
+  bimep_points_file <- fs::path(local_directory, "bimep_gps.shp")
+  if (!file.exists(bimep_points_file)) {
+    bimep_raw <- bimep_population_as_points()
+    intersected_with_bioko <- sf::st_intersection(bimep_raw, bioko_sf)
+    sf::st_write(intersected_with_bioko, bimep_points_file, driver = "ESRI Shapefile")
+    features <- intersected_with_bioko
+  } else {
+    features <- sf::st_read(bimep_points_file)
+  }
   geolocated_on_grid(grid, features, bioko_sf)
 }
 
@@ -161,11 +170,17 @@ bimep_on_grid <- function(grid, bioko_sf, local_directory = "inst/extdata") {
 #' @param admin_sf A shapefile that defines where population is zero.
 #' @return A raster::raster with the new data on longlat, na in ocean,
 #'   zero or a pop value on land.
+#'
+#' The resulting shapfile has NA outside the administrative unit
+#' and counts of people from the GPS data inside the admin unit.
+#' If any GPS data is outside the admin unit, that will be nonzero,
+#' too.
+
 #' @export
-geolocated_on_grid <- function(grid, gelocated, admin_sf) {
-  house_and_na <- raster::rasterize(gelocated, grid, fun = sum, field = "pop")
-  hrsl_zero_mask <- raster::rasterize(admin_sf, grid, field = 0)
-  house_and_zero <- raster::cover(house_and_na, hrsl_zero_mask)
+geolocated_on_grid <- function(grid, geolocated, admin_sf) {
+  house_and_na <- raster::rasterize(geolocated, grid, fun = sum, field = "pop")
+  shapefile_zero_mask <- raster::rasterize(admin_sf, grid, field = 0)
+  house_and_zero <- raster::cover(house_and_na, shapefile_zero_mask)
   names(house_and_zero) <- c("BIMEP")
   house_and_zero
 }

@@ -129,6 +129,18 @@ The names are of the form `<grid><resolution>_<source>.tif`.
 So the HRSL is on a 100m grid. It is saved as `HRSL100_HRSL.tif`.
 Bioko data on that grid is saved as `HRSL100_Bioko.tif`.
 
+The incoming BIMEP data is GPS coordinates, and a few are farther in the ocean
+than one could comfortably kayak, so let's remove those.
+```{r trim_bimep}
+bimep_points_file <- fs::path(data_dir, "bimep_gps.shp")
+if (!file.exists(bimep_points_file)) {
+  bimep_raw <- bimep_population_as_points()
+  intersected_with_bioko <- sf::st_intersection(bimep_raw, bioko_sf)
+  sf::st_write(intersected_with_bioko, bimep_points_file, driver = "ESRI Shapefile")
+}
+```
+
+
 For each grid, the code to project the GPS data is the same.
 ```{r project_bimep, code = capture.output(dump("bimep_on_grid", ""))}
 ```

@@ -149,20 +149,55 @@ check_maps_match <- function(pops_map, pops_bimep, gofr_pair_df) {
   stopifnot(length(pops_bimep) == length(pops_map))
   mapna <- is.na(pops_map)
   bmna <- is.na(pops_bimep)
-  if (any(mapna != bmna)) {
+  difference_cnt <- sum(mapna != bmna)
+  total_finite <- length(pops_map) - sum(mapna | bmna)
+  only_map <- sum(mapna & !bmna)
+  only_bimep <- sum(bmna & !mapna)
+  both_na <- sum(mapna & bmna)
+  # There are some pixels by the seashore, and that's OK because it's
+  # outside significant digits.
+  if ((difference_cnt / total_finite) > 1) {
     print(gofr_pair_df)
-    difference_cnt <- sum(mapna != bmna)
-    total_finite <- length(pops_map) - sum(mapna | bmna)
-    only_map <- sum(mapna & !bmna)
-    only_bimep <- sum(bmna & !mapna)
-    both_na <- sum(mapna & bmna)
     stop(paste(
       difference_cnt, "of the NA values don't match out of", total_finite,
       "with", both_na, "na values of which", only_map, "only in the map and",
       only_bimep, "in the gold"
       ))
   }
+  list(
+    bimep_finite = length(pops_bimep) - sum(bmna),
+    bimep_na = sum(bmna),
+    pops_finite = length(pops_map) - sum(mapna),
+    pops_na = sum(mapna),
+    only_bimep_na = only_bimep,
+    only_pops_na = only_map,
+    both_na = both_na
+  )
 }
+
+
+#' If my map has a number where yours has an NA, then call yours
+#' a zero. This goes both ways.
+zero_where_disagree <- function(s1, s2) {
+  s1na <- is.na(s1)
+  s2na <- is.na(s2)
+  s1[s1na & !s2na] <- 0
+  s2[s2na & !s1na] <- 0
+  list(bimep = s1, map = s2)
+}
+
+
+check_disagree <- function() {
+  a <- c(1, 2, NA, NA)
+  b <- c(3, NA, 4, NA)
+  zwd <- zero_where_disagree(a, b)
+  stopifnot(all(zwd[[1]][1:3] == c(1, 2, 0)))
+  stopifnot(all(zwd[[2]][1:3] == c(3, 0, 4)))
+  stopifnot(is.na(zwd[[1]][4]))
+  stopifnot(is.na(zwd[[2]][4]))
+}
+check_disagree()
+
 
 calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
   # For each grid and resolution, there should be a map and a BIMEP version of that map.
@@ -182,7 +217,8 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
     check_maps_match(pops_map, pops_bimep, gofr_pair_df)
 
     # Bioko for the whole island.
-    island <- gofr_algorithm(pops_bimep, pops_map, normalize_gofr)
+    zwd <- zero_where_disagree(pops_bimep, pops_map)
+    island <- gofr_algorithm(zwd$bimep, zwd$map, normalize_gofr)
     gofr$Bioko[gofr_make_idx] <- island$num / island$den
     sse$Bioko[gofr_make_idx] <- island$num
     
@@ -202,7 +238,8 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
       adm2_object_id <- admin2_st_df[adm2_idx, "OBJECTID"]
       sub_bimep <- pops_bimep[segmented == adm2_object_id]
       sub_pops <- pops_map[segmented == adm2_object_id]
-      gofr_admin <- gofr_algorithm(sub_bimep, sub_pops, normalize_gofr)
+      zwd <- zero_where_disagree(sub_bimep, sub_pops)
+      gofr_admin <- gofr_algorithm(zwd$bimep, zwd$map, normalize_gofr)
       gofr[[store_name]][gofr_make_idx] <- gofr_admin$num / gofr_admin$den
       sse[[store_name]][gofr_make_idx] <- gofr_admin$num
     }
@@ -225,6 +262,46 @@ gofr_table <- function(gofr_map_type, gofr_algorithm, map_choice) {
   gofr_table[, !names(gofr_table) %in% "grid"]
 }
 ```
+Just to make sure the world makes sense, let's take a look at the maps
+in order to check that the BIMEP and the given map agree nicely.
+```{r examine_maps}
+examine_map_matches <- function(gofr_map_type) {
+  # For each grid and resolution, there should be a map and a BIMEP version of that map.
+  gofr <- blank_gofr_list()
+
+  results <- list()
+  for (gofr_make_idx in 1:nrow(gofr)) {
+    gofr_grid <- gofr[gofr_make_idx, "grid"]
+    gofr_resolution <- gofr[gofr_make_idx, "resolution"]
+    gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
+    stopifnot(nrow(gofr_pair_df) == 2)
+    pops_bimep <- raster::getValues(
+      gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]]
+      )
+    compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source == gofr_grid, "name"]][[1]]
+    pops_map <- raster::getValues(compare_map)
+    matchy <- check_maps_match(pops_map, pops_bimep, gofr_pair_df)
+    matchy["grid"] <- gofr_grid
+    matchy["resolution"] <- gofr_resolution
+    results[[gofr_make_idx]] <- matchy
+  }
+  data.frame(do.call(rbind, results))
+}
+rmm <- examine_map_matches(maps)
+rmm["kind"] <- "pop"
+rmd <- examine_map_matches(density)
+rmd["kind"] <- "dens"
+```
+That isn't printing well, but what we see are low numbers of differences except for
+LandScan fine, which I created by disaggregating LandScan, so that will mean a large
+seashore pixel will become fine pixels, which are farther from the shore.
+The count is 5656 / 227793, so it's 2.5 percent.
+We aren't using that one for GOFR, so I'll allow it.
+
+WorldPop has about 2500 / 227804 that disagree about NA values. That's 
+one percent. It looks like there is disagreement about the island
+boundary in the Southwest. That's why it gets as high as one percent.
+
 
 ## Run Several GOFR Algorithms
 
