@@ -429,8 +429,10 @@ gofr_table(maps, gofr_of_maps_original, coarse_resolutions)
 ```{r divide_by_gold_variance_coarse}
 gt <- gofr_table(maps, gofr_of_maps_gold_variance, coarse_resolutions)
 (gt[1:6, ])
-gt[7:nrow(gt), ]
+(pop_coarse_gold <- gt[7:nrow(gt), ])
 ```
+Use this to make the table: 
+`knitr::kable(pop_coarse_gold[, !names(pop_coarse_gold) %in% "resolution"], format = "latex")`.
 
 ```{r divide_by_obs_variance_coarse}
 gofr_table(maps, gofr_of_maps_observed_variance, coarse_resolutions)
