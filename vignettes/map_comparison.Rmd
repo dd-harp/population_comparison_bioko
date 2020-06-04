@@ -847,7 +847,7 @@ density_kernel_figure <- function(base_power, linewidth = 1, label = "") {
     log = "x",
     xlim = c(5, base_power^(l + 2)),
     ylim = c(0, 0.4),
-    xlab =  "% Area", ylab =  "Proportion of Population",
+    xlab =  "log(Pop Dens)", ylab =  "Proportion of Population",
     main = label
     )
   lines_for_datasets(datasets, linewidth)
