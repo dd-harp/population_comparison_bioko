@@ -32,7 +32,7 @@ library(plotrix)
 library(sf)
 library(sp)
 library(spatstat)
-library(viridis)
+#library(viridis) # Crashing with R 4.0.0.
 
 library(popbioko)
 
@@ -493,11 +493,24 @@ estimated density per square km. The population size plots instead
 use the count of people in a pixel.
 
 Set up consistent colors for the different data sets.
-```{r set_colors, echo=FALSE}
+```{r set_sources, echo = FALSE}
 sources_ordered <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
-colors <- c(viridis::plasma(8, alpha = 1, begin = 0, end = 1)[c(1, 3, 5, 7)], grey(0.7))
-names(colors) <- c("BIMEP", "WorldPop", "LandScan", "HRSL", "grey")
+# Viridis is causing problems in one installation, so let's make our own.
+color_component <- function(x) sprintf("%02x", floor(ifelse(x >= 1.0, 255, x * 256.0)))
+as_color <- function(xxx) paste(
+  c("#", color_component(xxx[1]), color_component(xxx[2]), color_component(xxx[3])), collapse = "")
+viridis_mock <- function(n) {
+  float_colors <- read.csv(rprojroot::find_rstudio_root_file("vignettes/plasma.csv"))
+  key_colors <- sapply(1:nrow(float_colors), function(n) as_color(as.numeric(float_colors[n, ])))
+  colorRampPalette(key_colors)(n)
+}
+#viridis_colors <- viridis::plasma(8, alpha = 1, begin = 0, end = 1)[c(1, 3, 5, 7)]
+viridis_colors <- viridis_mock(8)[c(1, 3, 5, 7)]
+```
 
+```{r set_colors, echo = FALSE}
+colors <- c(viridis_colors, grDevices::grey(0.7))
+names(colors) <- c("BIMEP", "WorldPop", "LandScan", "HRSL", "grey")
 logarithmic_axis_labels <- c(
   "1", "10", "100", "1,000", expression(10^4), expression(10^5), expression(10^6))
 ```
@@ -1272,9 +1285,12 @@ bbioko <- sf::st_transform(sf::st_read(rprojroot::find_package_root_file(
 qleg <- FALSE
 qbreaks <- c(0, 1, 10, 100, 1000, 10000, 100000)
 qnames <- c("<1", "1-10", "10-100", "100-1000", "1000-10000", ">10000")
-qpal <- c("#BBBBBBFF", viridis(length(qnames) - 1))
+qpal <- c("#BBBBBBFF", viridis_mock(length(qnames) - 1))
 # raster::projection(density[["BIMEP on HRSL coarse"]]) <- "+proj=longlat +datum=WGS84 +no_defs"
 # tmap::tm_shape(bbioko) + tmap::tm_borders(col = "black", lwd = 1) +
+for (set_crs_idx in 1:length(density)) {
+  raster::crs(density[[set_crs_idx]]) <- utm_projection
+}
 qbm <- tm_shape(density[["BIMEP on HRSL coarse"]]) +
   tm_raster(title = "Population", palette = qpal, breaks = qbreaks, labels = qnames) +
   tm_layout(title = "BIMEP", frame = FALSE) +
@@ -1306,7 +1322,7 @@ bmaps <- maps[c(3, 12, 4)]  # bimep, worldpop, hrsl
 bbreaks <- c(0, 1, 5, 10, 50, 100)
 bnames <- c("0-1", "1-5", "5-10", "10-50", "50-100")
 #bnames[seq(2, length(bnames), 2)] <- ""
-bpal <- c("#BBBBBBFF", viridis(length(bbreaks) - 1))
+bpal <- c("#BBBBBBFF", viridis_mock(length(bbreaks) - 1))
 bcropped <- raster::crop(bmaps[1][[1]], bcrop)
 bp1 <- tm_shape(bcropped) +
   tm_raster(title = "BIMEP", palette = bpal, breaks = bbreaks, labels = bnames) +
