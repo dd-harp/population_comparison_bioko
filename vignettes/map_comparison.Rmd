@@ -466,17 +466,18 @@ ans_df
   which 100m grid is used. For instance, the BIMEP on HRSL has a higher empty
   percent than the others. I could understand this by regridding
   BIMEP data to a set of evenly-spaced grids.
-- I don't know the implied year for HRSL here. The total populations
+- The implied year for HRSL is the last census, which is older. The total populations
   are different enough, that maybe I should use a growth rate
   for correction.
 - The empty percent was very sensitive to my choice of lower
   bound for empty. Should I make a graph of how different
   datasets get close to zero? It's a problem for both WorldPop
-  and LandScan.
-- The HRSL is 30m, not 100m. Make sure it's aggregated correctly to 1km.
-- WorldPop has a large population. They provide an unscaled and a
-  scaled version. Check which one we're using, what year it's supposed
-  to be, and try the other one.
+  and LandScan. Let's go with 1 person in an area. It gets rid
+  of clearly spurious nonzeros.
+- WorldPop provides an unscaled and a
+  scaled version. We're using the scaled version. The unscaled looks
+  a little cleaner, but the population is much too large. This seems
+  like the choice that will lead to better numbers for WP.
 - The 1km data behaves like a smooth grid. The 100m and 30m data
   behave like points. I see that b/c the point smoothing makes
   a big difference on the urban numbers. At what resolution do we
