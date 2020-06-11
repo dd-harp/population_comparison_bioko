@@ -88,6 +88,11 @@ get_from_ihme <- function(filename, local_directory = "inst/extdata") {
 #' 10 or 15 is 2010 or 2015 data.
 #' adjv2 or v2 is whether it was adjusted to match WHO.
 #' So use GNQ15v2.tif.
+#'
+#' This dataset is from 2018, even though it doesn't say that in the URL. The ftp shows a last
+#' modification date of 11/23/18. We could also use:
+#' ftp://ftp.worldpop.org.uk/GIS/Population/Global_2000_2020/2018/GNQ/gnq_ppp_2018.tif
+#'
 #' @param local directory Where to put that file on the local machine.
 #' @param overwrite Whether to overwrite an existing file by the same name.
 #' @export
@@ -104,6 +109,15 @@ download_worldpop <- function(local_directory = "inst/extdata", overwrite = FALS
     un7zip(local_file, worldpop_directory)
   }
   dir(worldpop_directory)
+}
+
+
+
+#' The gridded population of the world
+#' @export
+download_gridded_population_world <- function() {
+  url <- "https://sedac.ciesin.columbia.edu/downloads/data/gpw-v4/gpw-v4-population-count-rev11/gpw-v4-population-count-rev11_2020_30_sec_tif.zip"
+  url
 }
 
 
