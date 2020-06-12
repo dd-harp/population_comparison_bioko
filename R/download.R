@@ -195,7 +195,7 @@ read_landscan <- function(local_directory = "inst/extdata") {
 #' @return a `raster::raster` file.
 #' @export
 read_worldpop <- function(local_directory = "inst/extdata") {
-  wp_options <- list(raw = "GNQ15v2.tif", adjusted = "GNQ15adjv2.tif")
+  wp_options <- list(raw = "gnq_ppp_2018.tif", adjusted = "gnq_ppp_2018_UNadj.tif")
   raster::raster(fs::path(
     local_directory, "Equatorial_Guinea_100m_Population", wp_options[["adjusted"]]))
 }

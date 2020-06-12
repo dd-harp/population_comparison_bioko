@@ -332,10 +332,17 @@ a bunch of times and see what the values are.
 ```{r error_bounds, eval = FALSE}
 # With side_len = 10, this can take two hours to run.
 error_dir <- fs::path(params$data_directory, "errors")
+if (!dir.exists(error_dir)) {
+  dir.create(error_dir)
+}
 side_len <- 10
 for (grid in c("landscan", "hrsl", "worldpop")) {
   stats_file <- fs::path(error_dir, paste(grid, "csv", sep = "."))
-  popbioko::summary_statistics_multiple_grids(grid, side_len, stats_file)
+  if (!file.exists(stats_file)) {
+    popbioko::summary_statistics_multiple_grids(grid, side_len, stats_file)
+  } else {
+    warning(paste("file already exists", stats_file))
+  }
 }
 ```
 
@@ -807,7 +814,11 @@ log_density <- function(H, base_power = 2) {
   c2 <- ceiling(max(log(H[H > 0], base = base_power)))
   ixz <- which(H <= 0)
   upper <- 0
-  HH <- H[-ixz]
+  if (length(ixz) > 0) {
+    HH <- H[-ixz]
+  } else {
+    HH <- H
+  }
   Pz <- length(ixz)
   for (i in 1:c2) {
     upper <- c(upper, base_power^(i - 1))

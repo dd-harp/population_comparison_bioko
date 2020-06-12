@@ -112,9 +112,9 @@ your local drive, under the data directory. Look at the
 help for `data_configuration` to see about creating a config file
 for the download.
 ```{r download, results = "hide"}
-download_worldpop(local_directory = data_dir)
-download_bioko_grids(local_directory = data_dir)
-download_hrsl_points(local_directory = data_dir)
+#download_worldpop(local_directory = data_dir)
+#download_bioko_grids(local_directory = data_dir)
+#download_hrsl_points(local_directory = data_dir)
 ```
 # Align to Grids from BIMEP GPS Data
 This section uses the original BIMEP GPS data,
@@ -182,7 +182,7 @@ popbioko::write_aligned_raster(
 ```{r write_1000m_hrsl}
 aggregate_and_write <- function(raster, name) {
   pixel_area <- square_meters_per_pixel.raster(raster)
-  desired_area <- 10^6
+  desired_area <- 924^2  # The largest grid is 924x924, not 1km.
   fact <- round(sqrt(desired_area / pixel_area))
   cat(paste("aggregating factor for", name, "is", fact, "with pixel side", sqrt(pixel_area), "\n"))
   aggregated <- raster::aggregate(raster, fact = fact, fun = sum, expand = TRUE)
@@ -246,7 +246,7 @@ popbioko::write_aligned_raster(
 WorldPop is 100m, like the HRSL data, so we aggregate it.
 
 ```{r worldpop_to_grid}
-wp_options <- list(raw = "GNQ15v2.tif", adjusted = "GNQ15adjv2.tif")
+wp_options <- list(raw = "gnq_ppp_2018.tif", adjusted = "gnq_ppp_2018_UNadj.tif")
 worldpop <- raster::raster(fs::path(
   data_dir, "Equatorial_Guinea_100m_Population", wp_options[["adjusted"]]))
 worldpop <- raster::crop(worldpop, bioko_sf, snap = "out")
@@ -478,7 +478,7 @@ The WorldPop pixel size is 100m, so it's (0.0008333,-0.0008333)
 in lat-long.
 
 ```{r worlpop_raster}
-worldpop <- raster::raster(fs::path(data_dir, "Equatorial_Guinea_100m_Population", "GNQ15v2.tif"))
+worldpop <- raster::raster(fs::path(data_dir, "Equatorial_Guinea_100m_Population", "gnq_ppp_2018_UNadj.tif"))
 worldpop <- raster::crop(worldpop, bimep_feature, snap = "out")
 plot(worldpop)
 ```
