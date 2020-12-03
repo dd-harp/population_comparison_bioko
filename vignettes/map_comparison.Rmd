@@ -59,7 +59,7 @@ maps <- lapply(files, function(x) raster::raster(fs::path(map_root, x)))
 names(maps) <- rownames(files_df)
 files_df
 ```
-There are 12 rows for (3 data sources) x (2 resolutions each) x (data source and BIMEP comparison).
+There are 16 rows for (5 data sources) x (2 resolutions each) x (data source and BIMEP comparison).
 
 We will need some canonical projections, too. Universal Transverse Mercator (UTM)
 is a projection that will give us the island measured in meters.

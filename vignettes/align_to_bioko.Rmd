@@ -1,0 +1,244 @@
+---
+title: "Align grids to Bioko Grid"
+author: "Brendan F Fries, Carlos A Guerra, et al"
+output:
+  pdf_document:
+    number_sections: true
+    df_print: kable
+    toc: true
+header-includes:
+  - \usepackage{palatino}
+# The params block means you can put the data anywhere you like and
+# then render this document by passing a parameter to the rmarkdown render command.
+params:
+  data_directory: !r fs::path(rprojroot::find_root(rprojroot::is_rstudio_project), "inst", "extdata")
+---
+
+# Make other datasets align to BIMEP study grids
+The BIMEP study uses two grids, at 100m and 1km resolution.
+This section reads population datasets and regrids them
+onto the BIMEP study datasets.
+
+
+The output is all GeoTIFFs with names of the form data-on-grid.
+The data are BIMEP, WorldPop, HRSL, and LandScan. The grids
+are
+
+- area, a 1km grid used by BIMEP.
+- worldpop, a 100m grid used by WorldPop
+- 1kworldpop, a 1km grid that aggregates and aligns with the WorldPop grid.
+- landscan, the 1km LandScan grid
+- hrsl, the 100m HRSL grid.
+
+## Load BIMEP Early
+
+The BIMEP data will have a "pop" feature for the population in the pixel.
+Load it now so that we have its bounding box.
+
+```{r bimep_raster}
+bimep_feature <- bimep_population_as_points(local_directory = data_dir)
+names(bimep_feature)
+```
+We see the population as `pop` and the other column, which is the geometry
+for each point.
+
+## Align HRSL and BIMEP to BIMEP 1k Grid
+The Bioko grids define cells where BIMEP assigns residents of
+the island. One is a 1 km grid, the other a 100 m grid.
+If we read those grids, we can see that the input files
+are projected into UTM 32N, which makes all distances in meters.
+That's very convenient, but the original grids were defined as
+a regular grid in latitude and longitude.
+```{r grids, dependson = c("data_dir", "download")}
+grids <- read_bioko_grids(local_directory = data_dir)
+grid_info <- parameters_of_km_grid(grids$coarse, unproject = TRUE)
+```
+You can see from the description above that the coarse
+and fine grids are shapefiles. Are these grids complete, or are they partial?
+```{r complete_grids}
+area_per_pixel <- function(grid) {
+  bbox <- st_bbox(grid)
+  (bbox["xmax"] - bbox["xmin"]) * (bbox["ymax"] - bbox["ymin"])
+}
+cat("area per pixel coarse", area_per_pixel(grids$coarse) / 3894, "\n")
+cat("area per pixel fine", area_per_pixel(grids$fine) / 197086, "\n")
+```
+We see that the area per pixel for the coarse is about $10^6\:\mbox{m}^2$, which
+means it's probably a complete grid. The fine grid looks far from complete
+because we expect $10^4\:\mbox{m}^2$ per pixel.
+
+If we want to make such a grid, we could use
+```{r grid_copy, dpeendson = c("download")}
+coarse_grid_copy <- make_fresh_grid(grid_info$bbox, grid_info$dimensions)
+```
+We can show the original and copy in unprojected space
+in order to see that they overlap.
+```{r compare_1km_grids, fig.cap = "The original and our copy overlap.", dependson = "grid_copy"}
+grid_1km <- sf::st_transform(grids$coarse, crs = latitude_longitude_projection)
+tm_shape(coarse_grid_copy) +
+  tm_polygons(alpha = 0.1, border.col = "red") +
+  tm_shape(grid_1km) +
+  tm_polygons(alpha = 0.0, border.col = "blue")
+```
+
+
+What if we directly make a raster version of the 1km grid?
+```{r make_raster}
+km_raster <- raster::raster(
+  ncol = grid_info$dimensions[1],
+  nrow = grid_info$dimensions[2],
+  xmn = grid_info$bbox["xmin"],
+  xmx = grid_info$bbox["xmax"],
+  ymn = grid_info$bbox["ymin"],
+  ymx = grid_info$bbox["ymax"]
+  )
+raster::projection(km_raster) <- latitude_longitude_projection
+```
+
+Let's get some points to project to that raster.
+The HRSL gives the location of a roof, or NA values. It doesn't say where
+there could be population but isn't. Other population maps assign
+a population of 0 to all non-ocean areas, including lakes. LandScan says
+it extends the land area by a bit, too. We will use a shapefile for
+Bioko in order to assign zero values to the HRSL.
+```{r hrsl_plot}
+hrsl_raster <- read_hrsl(local_directory = data_dir)
+hrsl_raster_crop <- raster::crop(hrsl_raster, bimep_feature, snap = "out")
+hrsl_zero_mask <- raster::rasterize(bioko_sf, hrsl_raster_crop, field = 0)
+hrsl_raster_zero <- raster::cover(hrsl_raster_crop, hrsl_zero_mask)
+hrsl_points_sf <- hrsl_points(hrsl_raster_crop)
+# hrsl_points_sf[is.na(hrsl_points_sf[[1]]), 1] <- 0
+plot(hrsl_raster_zero)
+```
+
+
+And do the projection using a builtin function of the raster package.
+```{r project_to_raster}
+km_hrsl_raster <- raster::rasterize(
+  hrsl_points_sf,
+  km_raster,
+  field = "population_gnq_2018.10.01",
+  fun = sum
+  )
+area_zero_raster <- raster::rasterize(bioko_sf, km_hrsl_raster, field = 0)
+km_hrsl_raster <- raster::cover(km_hrsl_raster, area_zero_raster)
+```
+
+```{r}
+plot(km_hrsl_raster)
+```
+
+Rasterize that pop feature, summing it per pixel.
+```{r}
+bimep_raster <- raster::rasterize(
+  bimep_feature,
+  km_raster,
+  field = "pop",
+  fun = sum
+  )
+names(bimep_raster)
+```
+```{r}
+plot(bimep_raster)
+```
+
+We will write all raster layers the same way.
+```{r}
+write_one <- function(layer, basename) {
+  raster::writeRaster(
+    layer,
+    filename = fs::path(data_dir, basename),
+    format = "GTiff",
+    overwrite = TRUE
+    )
+}
+```
+
+Write these as layers to a GeoTIFF.
+```{r write_hrsl_bimep}
+names(km_hrsl_raster) <- c("HRSL")
+names(bimep_raster) <- c("BIMEP")
+write_one(km_hrsl_raster, "hrsl_on_area")
+write_one(bimep_raster, "bimep_on_area")
+write_one(hrsl_raster_zero, "hrsl_on_hrsl")
+```
+
+
+```{r, eval = FALSE}
+grids$coarse["hrsl"] <- hrsl_points_sf[[1]]
+tm_shape(grids$coarse[grids$coarse$hrsl > 0,]) +
+  tm_polygons("hrsl", title = "HRSL", palette = "Greens", style = "log10") +
+  tm_layout(legend.title.size = 1, legend.text.size = 1)
+```
+
+## Align BIMEP to LandScan Grid
+
+The LandScan grid is an Arc/Info Binary Grid, so it's the adf type.
+It uses pixel sizes of 0.008333 in both dimensions.
+It's the whole world, so we will subset it.
+
+```{r landscan}
+landscan <- read_landscan(local_directory = data_dir)
+landscan <- raster::crop(landscan, bimep_feature, snap = "out")
+plot(landscan)
+```
+Now put the bimep 100m data on the LandScan raster.
+```{r}
+bimep_landscan_raster <- raster::rasterize(
+  bimep_feature,
+  landscan,
+  field = "pop",
+  fun = sum
+  )
+names(bimep_landscan_raster)
+```
+
+```{r}
+plot(bimep_landscan_raster)
+```
+
+```{r write_landscan_bimep}
+names(bimep_landscan_raster) <- c("HRSL")
+names(landscan) <- c("LandScan")
+write_one(landscan, "landscan_on_landscan")
+write_one(bimep_landscan_raster, "bimep_on_landscan")
+```
+
+## BIMEP Data on WorldPop Raster
+
+The WorldPop pixel size is 100m, so it's (0.0008333,-0.0008333)
+in lat-long.
+
+```{r worlpop_raster}
+worldpop <- raster::raster(fs::path(data_dir, "Equatorial_Guinea_100m_Population", "gnq_ppp_2018_UNadj.tif"))
+worldpop <- raster::crop(worldpop, bimep_feature, snap = "out")
+plot(worldpop)
+```
+Let's turn the worldpop into a 1km grid using aggregation.
+```{r aggregate_worldpop}
+worldpop_1km <- raster::aggregate(worldpop, fact = 10, fun = sum, expand = TRUE)
+plot(worldpop_1km)
+```
+Now put the BIMEP on this raster.
+```{r bimep_on_worldpop}
+bimep_worldpop_raster <- raster::rasterize(
+  bimep_feature,
+  worldpop_1km,
+  field = "pop",
+  fun = sum
+  )
+names(bimep_worldpop_raster)
+```
+
+```{r}
+plot(bimep_worldpop_raster)
+```
+
+```{r}
+names(worldpop_1km) <- "WorldPop"
+names(bimep_worldpop_raster) <- "BIMEP"
+wp_layers <- raster::addLayer(worldpop_1km, bimep_worldpop_raster)
+write_one(worldpop_1km, "worldpop_on_1kworldpop")
+write_one(bimep_worldpop_raster, "bimep_on_1kworldpop")
+write_one(worldpop, "worldpop_on_worldpop")
+```
