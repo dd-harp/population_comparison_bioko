@@ -1259,8 +1259,8 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type) {
 admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
 # If these are out of order, then the names in admin_names are in the wrong order.
 stopifnot(admin2_sf$OBJECTID == 1:4)
-gofr <- unique(files_df[, c("grid", "resolution")])
-rownames(gofr) <- paste(gofr$grid, gofr$resolution)
+gofr <- files_df[files_df$source != "BIMEP", ]
+rownames(gofr) <- paste(gofr$source, gofr$resolution)
 gofr$GOFR <- numeric(nrow(gofr))
 gofr$Baney <- numeric(nrow(gofr))
 gofr$Malabo <- numeric(nrow(gofr))
@@ -1292,11 +1292,15 @@ gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
 }
 
 for (gofr_make_idx in 1:nrow(gofr)) {
+  gofr_source <- gofr[gofr_make_idx, "source"]
   gofr_grid <- gofr[gofr_make_idx, "grid"]
   gofr_resolution <- gofr[gofr_make_idx, "resolution"]
-  gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
-  pops_bimep <- raster::getValues(gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]])
-  compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source != "BIMEP", "name"]][[1]]
+  bimep_name <- files_df[
+    files_df$grid == gofr_grid & files_df$resolution == gofr_resolution & files_df$source == "BIMEP",
+    "name"
+    ]
+  pops_bimep <- raster::getValues(gofr_map_type[bimep_name][[1]])
+  compare_map <- gofr_map_type[gofr[gofr_make_idx, "name"]][[1]]
   pops_map <- raster::getValues(compare_map)
   stopifnot(length(pops_bimep) == length(pops_map))
   
@@ -1318,7 +1322,7 @@ gofr
 gofr_map_type <- maps
 gofr_absolute <- calculate_gofr(FALSE, gofr_map_type)
 gofr_normalized <- calculate_gofr(TRUE, gofr_map_type)
-choose <- c(2, 3, 6)
+choose <- 1:nrow(gofr_normalized)
 cols <- c("grid", "resolution", "GOFR", "Baney", "Luba", "Malabo", "Riaba")
 gofr_table <- rbind(gofr_absolute[choose, cols], gofr_normalized[choose, cols])
 gofr_table
@@ -1326,13 +1330,14 @@ gofr_table
 The incoming maps are HRSL fine, WorldPop fine, and LandScan coarse.
 ```{r gofr_table, eval = FALSE}
 # This is here to show how to get the table into LaTeX. Add format = "latex" to the line below.
+# You'll want to run this in the terminal and copy to the document.
 knitr::kable(t(gofr_table[, !names(gofr_table) %in% c("resolution")]), digits = 4)
 ```
 
 
 Let's remind ourselves what the WorldPop looks like, because those numbers are huge.
 ```{r plot_wp_again}
-plot(maps[["WorldPop on WorldPop fine"]])
+plot(maps[["WorldPop-U on WorldPop fine"]])
 ```
 # Map Plots
 We need a couple of pretty plots.
@@ -1357,9 +1362,17 @@ qbm <- tm_shape(density[["BIMEP on HRSL coarse"]]) +
   tm_layout(title = "BIMEP", frame = FALSE) +
   tm_legend(show = TRUE)
 
-qwp <- tm_shape(density[["WorldPop on WorldPop coarse"]]) +
-  tm_raster(title = "qwp", palette = qpal, breaks = qbreaks, labels = qnames) +
-  tm_layout(title = "WorldPop", frame = FALSE) + tm_legend(show = qleg)
+qwpc <- tm_shape(density[["WorldPop-C on WorldPop coarse"]]) +
+  tm_raster(title = "qwpc", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "WorldPop-C", frame = FALSE) + tm_legend(show = qleg)
+
+qwpu <- tm_shape(density[["WorldPop-U on WorldPop coarse"]]) +
+  tm_raster(title = "qwpu", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "WorldPop-U", frame = FALSE) + tm_legend(show = qleg)
+
+gpw <- tm_shape(density[["GPW on LandScan coarse"]]) +
+  tm_raster(title = "gpw", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "GPW", frame = FALSE) + tm_legend(show = qleg)
 
 qls <- tm_shape(density[["LandScan on LandScan coarse"]]) +
   tm_raster(title = "qls", palette = qpal, breaks = qbreaks, labels = qnames) +
@@ -1369,7 +1382,7 @@ qhrsl <- tm_shape(density[["HRSL on HRSL coarse"]]) +
   tm_raster(title = "qhrsl", palette = qpal, breaks = qbreaks, labels = qnames) +
   tm_layout(title = "HRSL", frame = FALSE) + tm_legend(show = qleg)
 
-quadmap <- tmap_arrange(qbm, qwp, qls, qhrsl, ncol = 2, nrow = 2)
+quadmap <- tmap_arrange(qbm, qls, qhrsl, qwpc, gpw, qwpu, ncol = 2, nrow = 3)
 tmap_save(quadmap, "islandquad.png")
 tmap_save(quadmap, "islandquad.pdf")
 quadmap
@@ -1379,12 +1392,27 @@ quadmap
 library(tmap)
 bcrop <- raster::extent(c(8.685, 8.85, 3.65, 3.80))  # for maps, not densities.
 #bcrop <- raster::extent(c(440000, 490000, 350000, 424000))
-bmaps <- maps[c(3, 12, 4)]  # bimep, worldpop, hrsl
+original_map_names <- c(
+ "BIMEP on HRSL fine",
+ "HRSL on HRSL fine",
+ "LandScan on LandScan coarse",
+ "WorldPop-C on WorldPop fine",
+ "GPW on LandScan coarse",
+ "WorldPop-U on WorldPop fine"
+)
+short_names <- vapply(strsplit(original_map_names, " "), function(x) x[[1]], FUN.VALUE = character(1))
+bmaps <- maps[original_map_names]
 bbreaks <- c(0, 1, 5, 10, 50, 100)
 bnames <- c("0-1", "1-5", "5-10", "10-50", "50-100")
 #bnames[seq(2, length(bnames), 2)] <- ""
 bpal <- c("#BBBBBBFF", viridis_mock(length(bbreaks) - 1))
 bcropped <- raster::crop(bmaps[1][[1]], bcrop)
+small_maps <- lapply(1:length(short_names), function(map_idx) {
+  tm_shape(raster::crop(bmaps[map_idx][[1]], bcrop)) +
+  tm_raster(title = short_names[map_idx], palette = bpal, breaks = bbreaks, labels = bnames) +
+  tm_legend(show = FALSE) +
+  tm_layout(title = LETTERS[map_idx], frame = FALSE)
+})
 bp1 <- tm_shape(bcropped) +
   tm_raster(title = "BIMEP", palette = bpal, breaks = bbreaks, labels = bnames) +
   tm_legend(show = FALSE) +
@@ -1401,7 +1429,12 @@ bp3 <- tm_shape(raster::crop(bmaps[3][[1]], bcrop)) +
 bleg <- tm_shape(bcropped) +
   tm_raster(title = "Population", palette = bpal, breaks = bbreaks, labels = bnames) + 
   tm_legend(legend.only = TRUE, position = c("center", "top"), title.size = 2, text.size = 1.5)
-closeup <- tmap_arrange(bp1, bp2, bp3, bleg, ncol = 2, nrow = 2)
+small_maps[length(small_maps) + 1] <- bleg
+small_maps[c("ncol", "nrow")] <- c(2, 3)
+#closeup <- tmap_arrange(bp1, bp2, bp3, bleg, ncol = 2, nrow = 2)
+# closeup <- do.call(tmap_arrange, small_maps)
+sm <- small_maps
+closeup <- tmap_arrange(sm[[1]], sm[[2]], sm[[3]], sm[[4]], sm[[5]], sm[[6]], nrow = 3, ncol = 2)
 tmap_save(closeup, "closeup.png")
 tmap_save(closeup, "closeup.pdf")
 closeup
