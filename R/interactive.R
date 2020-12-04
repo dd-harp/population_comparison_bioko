@@ -38,9 +38,11 @@ save_plot <- function(plot_function, name) {
   if (!dir.exists(image_directory)) {
     dir.create(image_directory, showWarnings = FALSE, recursive = TRUE)
   }
+  pngfun <- function(fn) grDevices::png(fn, width = 1000, height = 1000,
+                                        units = "px", pointsize = 12)
   formats <- list(
     list(fun = grDevices::pdf, name = "pdf"),
-    list(fun = grDevices::png, name = "png")
+    list(fun = pngfun, name = "png")
   )
   filename <- vector(mode = "character", length = length(formats))
   for (f_idx in 1:length(formats)) {

@@ -537,18 +537,25 @@ names(symbol_size) <- c("coarse", "fine")
 symbol_choice <- c(19, 15)
 names(symbol_choice) <- c("coarse", "fine")
 
+check_name <- function(value, which, res, source) {
+  if (length(value) != 1) {
+    cat(sprintf("Could not find %s-%s-%s\n", which, res, source))
+  }
+  value
+}
 
 map_from_source_resolution <- function(source, resolution, map_list) {
-  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == source, ]
-  x_map_name <- xy_df[xy_df$source == "BIMEP", "name"]
-  y_map_name <- xy_df[xy_df$source == source, "name"]
+  grid_to_use <- unique(files_df[files_df$source == source, "grid"])
+  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == grid_to_use, ]
+  x_map_name <- check_name(xy_df[xy_df$source == "BIMEP", "name"], "bimep", resolution, source)
+  y_map_name <- check_name(xy_df[xy_df$source == source, "name"], "y", resolution, source)
   gv <- function(a_map_name) {
     if (!a_map_name %in% names(map_list)) {
       msg <- sprintf("%s not in map names", a_map_name)
       cat(paste(msg, "\n"))
       stop(msg)
     }
-    raster::getValues(map_list[[x_map_name]])
+    raster::getValues(map_list[[a_map_name]])
   }
   x <- gv(x_map_name)
   y <- gv(y_map_name)
@@ -613,11 +620,13 @@ maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, 
 
 scatter1k_together <- function() {
   maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
-  subjects <- c("HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
-  pop_scatter(
-    c(subjects, "HRSL", "WorldPop-C", "WorldPop-U"), c(rep("coarse", length(subjects)), rep("fine", 3)),
-    density_label, "A", maximum1k)
-  legend("topleft", legend =  subjects, col = colors[subjects],
+  subjects <- c("HRSL", "LandScan", "WorldPop-C", "WorldPop-U",
+                "GPW", "HRSL", "WorldPop-C", "WorldPop-U")
+  uniq_cnt <- length(unique(subjects))
+  resolution <- c(rep("coarse", uniq_cnt), rep("fine", length(subjects) - uniq_cnt))
+  pop_scatter(subjects, resolution, density_label, "A", maximum1k)
+  uniq <- unique(subjects)
+  legend("topleft", legend =  uniq, col = colors[uniq],
              lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
 }
 scatter1k_together()
@@ -638,11 +647,28 @@ scatter1k_hrsl()
 ```
 
 ```{r plot_woldpop_density, dpi = 150}
-scatter1k_wp <- function() pop_scatter(
-  rep("WorldPop", 2), c("fine", "coarse"),
-  density_label, "D) WorldPop", maximum1k, background = 1)
-scatter1k_wp()
+scatter1k_wpc <- function() pop_scatter(
+  rep("WorldPop-C", 2), c("fine", "coarse"),
+  density_label, "D) WorldPop-C", maximum1k, background = 1)
+scatter1k_wpc()
 ```
+
+
+```{r plot_woldpop_density, dpi = 150}
+scatter1k_wpu <- function() pop_scatter(
+  rep("WorldPop-U", 2), c("fine", "coarse"),
+  density_label, "E) WorldPop-U", maximum1k, background = 1)
+scatter1k_wpu()
+```
+
+
+```{r plot_woldpop_density, dpi = 150}
+scatter1k_gpw <- function() pop_scatter(
+  rep("GPW", 2), c("fine", "coarse"),
+  density_label, "F) GPW", maximum1k, background = 1)
+scatter1k_gpw()
+```
+
 ```{r pop_scatter_hrsl100, dpi = 150}
 maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
@@ -656,22 +682,34 @@ scatter1k_hrsl_count()
 ```{r pop_scatter_wp100, dpi = 150}
 maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
-scatter1k_wp_count <- function() pop_scatter(
-  rep("WorldPop", 1), c("fine"),
-  pop_scatter_label, "F) WP, 100x100 m", maximum100, counts = TRUE)
-scatter1k_wp_count()
+scatter1k_wpc_count <- function() pop_scatter(
+  rep("WorldPop-C", 1), c("fine"),
+  pop_scatter_label, "F) WP-C, 100x100 m", maximum100, counts = TRUE)
+scatter1k_wpc_count()
 ```
 
+```{r pop_scatter_wp100, dpi = 150}
+maximum100 <- 6.2
+pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
+scatter1k_wpu_count <- function() pop_scatter(
+  rep("WorldPop-U", 1), c("fine"),
+  pop_scatter_label, "F) WP-U, 100x100 m", maximum100, counts = TRUE)
+scatter1k_wpu_count()
+```
 
 ```{r scatter1k_figure, dpi = 150}
 make_figure <- function() {
-  par(mfrow = c(3, 2), mar = c(5, 4.2, 3, 2))
+  #par(mfrow = c(5, 2), mar = c(5, 4.2, 3, 2))
+  par(mfrow = c(5, 2), mar = c(1, 1, 1, 1))
   scatter1k_together()
   scatter1k_ls()
   scatter1k_hrsl()
-  scatter1k_wp()
+  scatter1k_wpc()
+  scatter1k_wpu()
+  scatter1k_gpw()
   scatter1k_hrsl_count()
-  scatter1k_wp_count()
+  scatter1k_wpc_count()
+  scatter1k_wpu_count()
 }
 popbioko::save_plot(make_figure, "scatter1k")
 make_figure()
@@ -685,7 +723,8 @@ one part to generate x and y data and one part to decide axes and such for that 
 
 ```{r linear_from_source_resolution}
 linear_from_source_resolution <- function(source, resolution, map_list) {
-  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == source, ]
+  grid <- unique(files_df[files_df$source == source, "grid"])
+  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == grid, ]
   x_map_name <- xy_df[xy_df$source == "BIMEP", "name"]
   y_map_name <- xy_df[xy_df$source == source, "name"]
   x <- raster::getValues(map_list[[x_map_name]])
@@ -693,7 +732,7 @@ linear_from_source_resolution <- function(source, resolution, map_list) {
   list(x = x, y = y)
 }
 
-sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
 
 # This draws each line for the plots, taking care of color and line type.
 lines_for_datasets <- function(datasets, linewidth) {
@@ -732,7 +771,7 @@ cdfAreaFigure <- function(llwd = 1, label = "") {
     xlab =  "% Area", ylab =  "Proportion of Population",
     main = label
     )
-  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
   for (source in sources) {
     for (resolution in c("coarse", "fine")) {
       if (source == "BIMEP") {
@@ -1171,15 +1210,18 @@ This is table 3, which has accuracy, recall, and precision for ranges of values.
 ```{r accuracy_table}
 HRSL <- fullCat(ppv_data["y", "HRSL"][[1]], ppv_data["x", "HRSL"][[1]])
 LS <- fullCat(ppv_data["y", "LandScan"][[1]], ppv_data["x", "LandScan"][[1]])
-WP <- fullCat(ppv_data["y", "WorldPop"][[1]], ppv_data["x", "WorldPop"][[1]])
+WP <- fullCat(ppv_data["y", "WorldPop-C"][[1]], ppv_data["x", "WorldPop-C"][[1]])
+WPU <- fullCat(ppv_data["y", "WorldPop-U"][[1]], ppv_data["x", "WorldPop-U"][[1]])
+GPW <- fullCat(ppv_data["y", "GPW"][[1]], ppv_data["x", "GPW"][[1]])
+
 
 # ppv <- cbind(HRSL = as.vector(HRSL$ppv), LS = as.vector(LS$ppv), WP = as.vector(WP$ppv))
 # sens <- cbind(HRSL = as.vector(HRSL$sens), LS = as.vector(LS$sens), WP = as.vector(WP$sens))
 # acc <- cbind(HRSL = as.vector(HRSL$acc), LS = as.vector(LS$acc), WP = as.vector(WP$acc))
 
-ppv <- cbind(HRSL = as.numeric(HRSL$ppv), LS = as.numeric(LS$ppv), WP = as.numeric(WP$ppv))
-sens <- cbind(HRSL = as.numeric(HRSL$sens), LS = as.numeric(LS$sens), WP = as.numeric(WP$sens))
-acc <- cbind(HRSL = as.numeric(HRSL$acc), LS = as.numeric(LS$acc), WP = as.numeric(WP$acc))
+ppv <- cbind(HRSL = as.numeric(HRSL$ppv), LS = as.numeric(LS$ppv), WPC = as.numeric(WP$ppv), WPU = as.numeric(WPU$ppv), GPW = as.numeric(GPW$ppv))
+sens <- cbind(HRSL = as.numeric(HRSL$sens), LS = as.numeric(LS$sens), WPC = as.numeric(WP$sens), WPU = as.numeric(WPU$sens), GPW = as.numeric(GPW$sens))
+acc <- cbind(HRSL = as.numeric(HRSL$acc), LS = as.numeric(LS$acc), WPC = as.numeric(WP$acc), WPU = as.numeric(WPU$acc), GPW = as.numeric(GPW$acc))
 accuracy_as_table <- signif(cbind(acc, sens, ppv), 3)
 rownames(accuracy_as_table) <- rownames(HRSL)
 t(accuracy_as_table)
