@@ -194,10 +194,16 @@ aggregate_and_write <- function(raster, name) {
     list(source = name$source, grid = name$grid, resolution = agg_pixel_side),
     local_directory = data_dir)
 }
+```
+
+```{r agg_hrsl_zero}
 aggregate_and_write(
   hrsl_raster_zero,
   list(source = "HRSL", grid = "HRSL", resolution = 30)
 )
+```
+
+```{r agg_bimep_on_hrsl}
 aggregate_and_write(
   bimep_on_hrsl,
   list(source = "BIMEP", grid = "HRSL", resolution = 30)
@@ -252,7 +258,9 @@ This is the [unconstrained, individual-country data](https://www.worldpop.org/ge
 wp_options <- list(raw = "gnq_ppp_2018.tif", adjusted = "gnq_ppp_2018_UNadj.tif")
 worldpop <- raster::raster(fs::path(
   data_dir, "Equatorial_Guinea_100m_Population", wp_options[["adjusted"]]))
-worldpop <- raster::crop(worldpop, bioko_sf, snap = "out")
+worldpop_na <- raster::crop(worldpop, bioko_sf, snap = "out")
+worldpop_zero_mask <- raster::rasterize(bioko_sf, worldpop_na, field = 0)
+worldpop <- raster::cover(worldpop_na, worldpop_zero_mask)
 worldpop_id <- list(source = "WorldPop-U", grid = "WorldPop", resolution = 100)
 bimep_id <- worldpop_id
 bimep_id$source <- "BIMEP"
@@ -295,7 +303,9 @@ Called gnq_ppp_2020_UNadj_constrained.tif.
 wp_options <- list(adjusted = "gnq_ppp_2020_UNadj_constrained.tif")
 worldpop_constrained <- raster::raster(fs::path(
   data_dir, "worldpop_constrained", wp_options[["adjusted"]]))
-worldpop_constrained <- raster::crop(worldpop_constrained, bioko_sf, snap = "out")
+worldpop_constrained_na <- raster::crop(worldpop_constrained, bioko_sf, snap = "out")
+worldpop_c_zero_mask <- raster::rasterize(bioko_sf, worldpop_constrained_na, field = 0)
+worldpop_constrained <- raster::cover(worldpop_constrained_na, worldpop_c_zero_mask)
 worldpop_constrained_id <- list(source = "WorldPop-C", grid = "WorldPop", resolution = 100)
 popbioko::write_aligned_raster(
   worldpop_constrained,
@@ -316,23 +326,34 @@ tm_shape(worldpop_constrained) + tm_raster()
 
 This is on the same grid as LandScan.
 
-```{r}
+```{r load_gpw}
 gpw = raster::raster(fs::path(
   data_dir, "gpw", "gpw_v4_population_count_rev11_2020_30_sec.tif"))
 gpw <- raster::crop(gpw, bioko_sf, snap = "out")
-gpw_id <- list(source = "GPW", grid = "LandScan", resolution = 100)
+gpw_id <- list(source = "GPW", grid = "LandScan", resolution = 1000)
 stopifnot(as.character(raster::crs(gpw)) == "+proj=longlat +datum=WGS84 +no_defs")
 stopifnot(raster::extent(gpw) == raster::extent(landscan))
 stopifnot(raster::res(gpw) == raster::res(landscan))
+```
+Therefore, disaggregate this like we did LandScan.
+
+```{r disaggregate_landscan}
+factor <- 10
+gpw100 <- raster::disaggregate(gpw, fact = factor) / factor^2
 popbioko::write_aligned_raster(
   gpw,
   gpw_id,
   local_directory = data_dir
 )
-aggregate_and_write(
-  gpw,
-  gpw_id
+popbioko::write_aligned_raster(
+  gpw100,
+  list(source = "GPW", grid = "LandScan", resolution = 100),
+  local_directory = data_dir
 )
+```
+
+```{r show_gpw}
+tm_shape(gpw) + tm_raster()
 ```
 
 

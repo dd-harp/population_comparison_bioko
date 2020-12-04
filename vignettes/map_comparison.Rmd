@@ -462,7 +462,7 @@ ans_df <- single_ci(consider_error[1])
 for (col in consider_error[2:length(consider_error)]) {
   ans_df <- merge(ans_df, single_ci(col))
 }
-ans_df
+t(ans_df)
 ```
 
 ## Discussion
@@ -501,7 +501,7 @@ use the count of people in a pixel.
 
 Set up consistent colors for the different data sets.
 ```{r set_sources, echo = FALSE}
-sources_ordered <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+sources_ordered <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
 # Viridis is causing problems in one installation, so let's make our own.
 color_component <- function(x) sprintf("%02x", floor(ifelse(x >= 1.0, 255, x * 256.0)))
 as_color <- function(xxx) paste(
@@ -512,12 +512,12 @@ viridis_mock <- function(n) {
   colorRampPalette(key_colors)(n)
 }
 #viridis_colors <- viridis::plasma(8, alpha = 1, begin = 0, end = 1)[c(1, 3, 5, 7)]
-viridis_colors <- viridis_mock(8)[c(1, 3, 5, 7)]
+viridis_colors <- viridis_mock(length(sources_ordered))
 ```
 
 ```{r set_colors, echo = FALSE}
 colors <- c(viridis_colors, grDevices::grey(0.7))
-names(colors) <- c("BIMEP", "WorldPop", "LandScan", "HRSL", "grey")
+names(colors) <- c(sources_ordered, "grey")
 logarithmic_axis_labels <- c(
   "1", "10", "100", "1,000", expression(10^4), expression(10^5), expression(10^6))
 ```
@@ -542,8 +542,16 @@ map_from_source_resolution <- function(source, resolution, map_list) {
   xy_df <- files_df[files_df$resolution == resolution & files_df$grid == source, ]
   x_map_name <- xy_df[xy_df$source == "BIMEP", "name"]
   y_map_name <- xy_df[xy_df$source == source, "name"]
-  x <- raster::getValues(map_list[[x_map_name]])
-  y <- raster::getValues(map_list[[y_map_name]])
+  gv <- function(a_map_name) {
+    if (!a_map_name %in% names(map_list)) {
+      msg <- sprintf("%s not in map names", a_map_name)
+      cat(paste(msg, "\n"))
+      stop(msg)
+    }
+    raster::getValues(map_list[[x_map_name]])
+  }
+  x <- gv(x_map_name)
+  y <- gv(y_map_name)
   list(x = logoff(x), y = logoff(y))
 }
 
@@ -605,11 +613,11 @@ maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, 
 
 scatter1k_together <- function() {
   maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
-  the_three <- c("HRSL", "LandScan", "WorldPop")
+  subjects <- c("HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
   pop_scatter(
-    c(the_three, "HRSL", "WorldPop"), c(rep("coarse", 3), rep("fine", 2)),
+    c(subjects, "HRSL", "WorldPop-C", "WorldPop-U"), c(rep("coarse", length(subjects)), rep("fine", 3)),
     density_label, "A", maximum1k)
-  legend("topleft", legend =  the_three, col = colors[the_three],
+  legend("topleft", legend =  subjects, col = colors[subjects],
              lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
 }
 scatter1k_together()
