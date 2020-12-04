@@ -129,9 +129,10 @@ tmap::tm_shape(admin2_sf) + tmap::tm_polygons("admin2")
 These functions run the calculations. We put this here to get it out of the way.
 It's all about intersecting maps and organizing the data.
 ```{r whole_island_gofr}
+# Makes a data frame that lists each GOFR row we need to calculate.
 blank_gofr_list <- function() {
-  gofr <- unique(files_df[, c("grid", "resolution")])
-  rownames(gofr) <- paste(gofr$grid, gofr$resolution)
+  gofr <- files_df[files_df$source != "BIMEP",]
+  rownames(gofr) <- paste(gofr$source, gofr$resolution)
   gofr$Bioko <- numeric(nrow(gofr))
   # We will calculate GOFR for each admin2, in addition to the whole island.
   for (admin_idx in 1:nrow(admin2_st_df)) {
@@ -215,16 +216,16 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
   den <- blank_gofr_list()
   
   for (gofr_make_idx in 1:nrow(gofr)) {
+    gofr_source <- gofr[gofr_make_idx, "source"]
     gofr_grid <- gofr[gofr_make_idx, "grid"]
     gofr_resolution <- gofr[gofr_make_idx, "resolution"]
-    gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
-    stopifnot(nrow(gofr_pair_df) == 2)
-    pops_bimep <- raster::getValues(
-      gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]]
-      )
-    compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source == gofr_grid, "name"]][[1]]
+    bimep_name <- files_df[
+      files_df$grid == gofr_grid & files_df$resolution == gofr_resolution & files_df$source == "BIMEP",
+      "name"
+      ]
+    pops_bimep <- raster::getValues(gofr_map_type[bimep_name][[1]])
+    compare_map <- gofr_map_type[gofr[gofr_make_idx, "name"]][[1]]
     pops_map <- raster::getValues(compare_map)
-    check_maps_match(pops_map, pops_bimep, gofr_pair_df)
 
     # Bioko for the whole island.
     zwd <- zero_where_disagree(pops_bimep, pops_map)
@@ -260,19 +261,26 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
 }
 
 #' This makes a dataframe with both unnormalized and normalized gofr, ready to print.
+#' @param gofr_map_type These are either the count maps or the density maps.
+#' @param gofr_algorithm This is one of the functions below to calculate SSE and
+#'    variance in different ways.
+#' @param map_choice A list of which of the items in the gofr_map_type to run against.
 gofr_table <- function(gofr_map_type, gofr_algorithm, map_choice) {
   gofr_absolute <- calculate_gofr(FALSE, gofr_map_type, gofr_algorithm)
   gofr_normalized <- calculate_gofr(TRUE, gofr_map_type, gofr_algorithm)
-  cols <- c("grid", "resolution", "Bioko", "Baney", "Luba", "Malabo", "Riaba")
+  cols <- c("source", "resolution", "Bioko", "Baney", "Luba", "Malabo", "Riaba")
+  if (is.null(map_choice)) {
+    map_choice <- 1:length(gofr_absolute$gofr)
+  }
   gofr_table <- rbind(
     gofr_absolute$sse[map_choice, cols],
     gofr_absolute$den[map_choice, cols],
     gofr_absolute$gofr[map_choice, cols],
     gofr_normalized$gofr[map_choice, cols]
     )
-  kinds <- rep(c("SSE", "Var", "absolute", "normed"), each = 3)
-  row.names(gofr_table) <- paste(kinds, gofr_table$grid)
-  gofr_table[, !names(gofr_table) %in% "grid"]
+  kinds <- rep(c("SSE", "Var", "absolute", "normed"), each = length(gofr_absolute$gofr))
+  row.names(gofr_table) <- paste(kinds, gofr_table$source, gofr_table$resolution)
+  gofr_table[, !names(gofr_table) %in% c("grid", "filename", "name")]
 }
 ```
 Just to make sure the world makes sense, let's take a look at the maps
@@ -284,17 +292,18 @@ examine_map_matches <- function(gofr_map_type) {
 
   results <- list()
   for (gofr_make_idx in 1:nrow(gofr)) {
+    gofr_source <- gofr[gofr_make_idx, "source"]
     gofr_grid <- gofr[gofr_make_idx, "grid"]
     gofr_resolution <- gofr[gofr_make_idx, "resolution"]
-    gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
-    stopifnot(nrow(gofr_pair_df) == 2)
-    pops_bimep <- raster::getValues(
-      gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]]
-      )
-    compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source == gofr_grid, "name"]][[1]]
+    bimep_name <- files_df[
+      files_df$grid == gofr_grid & files_df$resolution == gofr_resolution & files_df$source == "BIMEP",
+      "name"
+      ]
+    pops_bimep <- raster::getValues(gofr_map_type[bimep_name][[1]])
+    compare_map <- gofr_map_type[gofr[gofr_make_idx, "name"]][[1]]
     pops_map <- raster::getValues(compare_map)
-    matchy <- check_maps_match(pops_map, pops_bimep, gofr_pair_df)
-    matchy["grid"] <- gofr_grid
+    matchy <- check_maps_match(pops_map, pops_bimep, gofr[gofr_make_idx,])
+    matchy["source"] <- gofr_source
     matchy["resolution"] <- gofr_resolution
     results[[gofr_make_idx]] <- matchy
   }
@@ -376,6 +385,8 @@ gofr_of_maps_observed_variance <- function(pops_map, pops_bimep, normalize = FAL
 }
 
 original_resolutions <- c(2, 3, 6)
+original_resolutions <- NULL
+
 coarse_resolutions <- c(1, 3, 5)
 ```
 
@@ -392,9 +403,12 @@ These tables:
 ```{r using_original_resolutions}
 # Set to maps or density for original map or density surface.
 gt <- gofr_table(maps, gofr_of_maps_original, original_resolutions)
-(gt[1:6, ])
+#(gt[1:6, ])
 gt[7:nrow(gt), ]
+gt[order(paste(gt$source, gt$resolution)),]
 ```
+
+
 ```{r divide_by_gold_variance}
 gofr_table(maps, gofr_of_maps_gold_variance, original_resolutions)
 ```
