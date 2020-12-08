@@ -646,7 +646,7 @@ scatter1k_hrsl <- function() pop_scatter(
 scatter1k_hrsl()
 ```
 
-```{r plot_woldpop_density, dpi = 150}
+```{r plot_woldpop_c_density, dpi = 150}
 scatter1k_wpc <- function() pop_scatter(
   rep("WorldPop-C", 2), c("fine", "coarse"),
   density_label, "D) WorldPop-C", maximum1k, background = 1)
@@ -654,7 +654,7 @@ scatter1k_wpc()
 ```
 
 
-```{r plot_woldpop_density, dpi = 150}
+```{r plot_woldpop_u_density, dpi = 150}
 scatter1k_wpu <- function() pop_scatter(
   rep("WorldPop-U", 2), c("fine", "coarse"),
   density_label, "E) WorldPop-U", maximum1k, background = 1)
@@ -662,7 +662,7 @@ scatter1k_wpu()
 ```
 
 
-```{r plot_woldpop_density, dpi = 150}
+```{r plot_woldpop_gpw_density, dpi = 150}
 scatter1k_gpw <- function() pop_scatter(
   rep("GPW", 2), c("fine", "coarse"),
   density_label, "F) GPW", maximum1k, background = 1)
@@ -688,7 +688,7 @@ scatter1k_wpc_count <- function() pop_scatter(
 scatter1k_wpc_count()
 ```
 
-```{r pop_scatter_wp100, dpi = 150}
+```{r pop_scatter2_wp100, dpi = 150}
 maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
 scatter1k_wpu_count <- function() pop_scatter(
@@ -697,10 +697,10 @@ scatter1k_wpu_count <- function() pop_scatter(
 scatter1k_wpu_count()
 ```
 
-```{r scatter1k_figure, dpi = 150}
+```{r scatter1k_figure, dpi = 150, fig.height = 14, fig.width = 8}
 make_figure <- function() {
   #par(mfrow = c(5, 2), mar = c(5, 4.2, 3, 2))
-  par(mfrow = c(5, 2), mar = c(1, 1, 1, 1))
+  par(mfrow = c(5, 2), mar = c(4, 3, 3, 2))
   scatter1k_together()
   scatter1k_ls()
   scatter1k_hrsl()

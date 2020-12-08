@@ -66,6 +66,27 @@ multiply values by $\exp(rt)$, where $r$ is the yearly growth rate.
 For Equatorial Guinea, that's 3.7% in 2017-2018, according to UN sources.
 This wouldn't affect the structure of zeroes, though.
 
+UN World Population Prospects 2019. Equatorial Guinea, average annual rate of
+population change (percentage), from https://population.un.org/wpp/DataQuery/:
+```{r wpp_pop_change}
+df = data.frame(
+  five_year = c("2000-2005", "2005-2010", "2010-2015", "2015-2020"),
+  annual_percent_change = c(4.24, 4.61, 4.28, 3.66)
+)
+```
+e^rt == 1.0366
+rt = log(1.0366)
+r = log(1.0366) / t
+```{r growth_rate}
+growth_rate_per_year = log(1.0366) / 1 # year
+```
+If WorldPop has a size of 362,962 people in 2020, what would that mean in 2018?
+```{r}
+c(362962 * exp(-2 * growth_rate_per_year), exp(-2 * growth_rate_per_year))
+```
+So that's 337,784, a decrease to 93% of what it was, and BIMEP is at 239,056.
+
+
 ## Conventions
 Pixels in the water should be marked as NA and excluded from
 calculations later.
@@ -305,7 +326,9 @@ worldpop_constrained <- raster::raster(fs::path(
   data_dir, "worldpop_constrained", wp_options[["adjusted"]]))
 worldpop_constrained_na <- raster::crop(worldpop_constrained, bioko_sf, snap = "out")
 worldpop_c_zero_mask <- raster::rasterize(bioko_sf, worldpop_constrained_na, field = 0)
-worldpop_constrained <- raster::cover(worldpop_constrained_na, worldpop_c_zero_mask)
+worldpop_constrained2020 <- raster::cover(worldpop_constrained_na, worldpop_c_zero_mask)
+# Here we apply a growth rate to go from 2020 to 2018. It's rough but an improvement.
+worldpop_constrained <- exp(-2 * growth_rate_per_year) * worldpop_constrained2020
 worldpop_constrained_id <- list(source = "WorldPop-C", grid = "WorldPop", resolution = 100)
 popbioko::write_aligned_raster(
   worldpop_constrained,
