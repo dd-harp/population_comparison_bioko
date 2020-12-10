@@ -322,6 +322,29 @@ as.data.frame(t(show1000_df[as.numeric(show1000_df$resolution) < 500, ]))
 as.data.frame(t(show1000_df[as.numeric(show1000_df$resolution) > 500, ]))
 ```
 
+```{r paper_version_show1000}
+display_order <- data.frame(
+  source = c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW", "BIMEP", "HRSL", "WorldPop-C", "WorldPop-U"),
+  granularity = c(rep("coarse", 6), rep("fine", 4)),
+  grid = c("HRSL", "HRSL", "LandScan", "WorldPop", "WorldPop", "LandScan", "HRSL", "HRSL", "WorldPop", "WorldPop")
+)
+short_source <- c(
+  BIMEP = "BIMEP", HRSL = "HRSL", LandScan = "LS", "WorldPop-C" = "WP-C",
+  "WorldPop-U" = "WP-U", GPW = "GPW")
+show1000_df$granularity <- ifelse(as.numeric(show1000_df$resolution) < 500, rep("fine", nrow(show1000_df)), rep("coarse", nrow(show1000_df)))
+show1000_df
+display_order
+do1000_df <- merge(display_order, show1000_df, by = c("source", "granularity", "grid"), sort = TRUE)
+stopifnot(nrow(do1000_df) == nrow(display_order))
+ord1000_df <- do.call(rbind, lapply(1:nrow(display_order), function(row_idx) {
+  with(do1000_df, do1000_df[source == display_order[row_idx, "source"] & granularity == display_order[row_idx, "granularity"], ])
+}))
+col_ord_df <- ord1000_df[, c("source", "resolution", "total", "max_density", "empty_percent", "urban_raw", "pareto_fraction")]
+col_ord_df$source <- short_source[col_ord_df$source]
+col_ord_df
+```
+Use this on command line: `knitr::kable(t(col_ord_df), format = "latex")`
+
 ## Error Bounds
 
 Carlos asked how much the exact alignment of the grid matters.
