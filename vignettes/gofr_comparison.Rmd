@@ -265,20 +265,25 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type, gofr_algorithm) {
 #' @param gofr_algorithm This is one of the functions below to calculate SSE and
 #'    variance in different ways.
 #' @param map_choice A list of which of the items in the gofr_map_type to run against.
-gofr_table <- function(gofr_map_type, gofr_algorithm, map_choice) {
+gofr_table <- function(gofr_map_type, gofr_algorithm, map_names) {
   gofr_absolute <- calculate_gofr(FALSE, gofr_map_type, gofr_algorithm)
   gofr_normalized <- calculate_gofr(TRUE, gofr_map_type, gofr_algorithm)
   cols <- c("source", "resolution", "Bioko", "Baney", "Luba", "Malabo", "Riaba")
-  if (is.null(map_choice)) {
+  if (is.null(map_names)) {
     map_choice <- 1:length(gofr_absolute$gofr)
+  } else {
+    map_choice <- vapply(1:length(map_names),
+                         function(i) which(gofr_absolute$gofr$name == map_names[i]),
+                         FUN.VALUE = integer(1))
   }
+  cat(paste("gofr names", paste(row.names(gofr_absolute), collapse = ",")))
   gofr_table <- rbind(
     gofr_absolute$sse[map_choice, cols],
     gofr_absolute$den[map_choice, cols],
     gofr_absolute$gofr[map_choice, cols],
     gofr_normalized$gofr[map_choice, cols]
     )
-  kinds <- rep(c("SSE", "Var", "absolute", "normed"), each = length(gofr_absolute$gofr))
+  kinds <- rep(c("SSE", "Var", "absolute", "normed"), each = length(map_names))
   row.names(gofr_table) <- paste(kinds, gofr_table$source, gofr_table$resolution)
   gofr_table[, !names(gofr_table) %in% c("grid", "filename", "name")]
 }
@@ -384,10 +389,13 @@ gofr_of_maps_observed_variance <- function(pops_map, pops_bimep, normalize = FAL
   )
 }
 
-original_resolutions <- c(2, 3, 6)
-original_resolutions <- NULL
-
-coarse_resolutions <- c(1, 3, 5)
+# Each map at its original resolution. Not BIMEP because we compare
+# against BIMEP.
+original_resolutions <- c(
+  "HRSL on HRSL fine", "GPW on LandScan coarse",
+  "LandScan on LandScan coarse", "WorldPop-C on WorldPop fine",
+  "WorldPop-U on WorldPop fine")
+coarse_resolutions <- gsub("fine", "coarse", original_resolutions[grep("fine", original_resolutions)])
 ```
 
 ### Maps with Original Resolutions, some fine, some coarse
@@ -408,9 +416,10 @@ gt[7:nrow(gt), ]
 gt[order(paste(gt$source, gt$resolution)),]
 ```
 
-
+This is part of the paper graphic. original resolutions for all. maps of counts, the gold-standard variance.
 ```{r divide_by_gold_variance}
-gofr_table(maps, gofr_of_maps_gold_variance, original_resolutions)
+original_paper_gofr <- gofr_table(maps, gofr_of_maps_gold_variance, original_resolutions)
+original_paper_gofr
 ```
 
 ```{r divide_by_obs_variance}
@@ -439,13 +448,30 @@ gofr_table(density, gofr_of_maps_observed_variance, original_resolutions)
 ```{r again_coarse}
 gofr_table(maps, gofr_of_maps_original, coarse_resolutions)
 ```
-
+This is the one that goes in the paper. maps of counts, the gold-standard variance.
 ```{r divide_by_gold_variance_coarse}
 gt <- gofr_table(maps, gofr_of_maps_gold_variance, coarse_resolutions)
-(gt[1:6, ])
-(pop_coarse_gold <- gt[7:nrow(gt), ])
+gt
 ```
 Use this to make the table: 
+```{r make_the_table, eval = FALSE}
+paper_gofr_all <- rbind(original_paper_gofr, gt)
+coarse_gofr <- paper_gofr_all[paper_gofr_all$resolution == "coarse",]
+coarse_gofr
+absolute_gofr <- coarse_gofr[startsWith(row.names(coarse_gofr), "absolute"),]
+absolute_gofr
+normed_gofr <- coarse_gofr[startsWith(row.names(coarse_gofr), "normed"),]
+paper_gofr_all
+source_order <- c("LandScan", "HRSL", "WorldPop-C", "WorldPop-U", "GPW")
+source_idx <- vapply(1:length(source_order), function(i) which(absolute_gofr$source == source_order[i]), FUN.VALUE = integer(1))
+correct_order <- rbind(absolute_gofr[source_idx,], normed_gofr[source_idx,])
+short_names = c(LandScan = "LS", HRSL = "HRSL", "WorldPop-C" = "WP-C", "WorldPop-U" = "WP-U", GPW = "GPW")
+correct_order$name <- short_names[correct_order$source]
+for_show <- correct_order[, c("name", "Bioko", "Baney", "Luba", "Malabo", "Riaba")]
+row.names(for_show) <- NULL
+t(for_show)
+```
+`knitr::kable(t(for_show), format = "latex")`
 `knitr::kable(pop_coarse_gold[, !names(pop_coarse_gold) %in% "resolution"], format = "latex")`.
 
 ```{r divide_by_obs_variance_coarse}
