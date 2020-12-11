@@ -28,7 +28,7 @@ to offer some clarity for this paper.
 
 1. Define the indicator(s), populations (including age, sex, and geographic entities), and time period(s)
 for which estimates were made. - The study area is Bioko Island, Equatorial Guinea. The Bioko
-Island data is 2018. LandScan data is 2018. WorldPop is the 2018 version. HRSL is current, which
+Island data is 2018. LandScan data is 2018. WorldPop Unconstrained is the 2018 version. WorldPop Constrained is for 2020, so we adjusted it with caveats. HRSL is current, which
 makes it a 2019 version, but it assigns numbers from census data, which is older.
 The age and sex are all ages and all sexes. It's a total population count.
 
@@ -39,9 +39,23 @@ https://www.mcdinternational.org/donors.
 
 3. Describe how the data were identified and how the data were accessed. - The BIMEP GPS-level data
 was critical to a previous collaboration among IHME, BIMEP, and other organizations in order
-to estimate malaria prevalence on Bioko Island. Gridded datasets were identified by starting
-with LandScan, WorldPop and HRSL, which we already knew, and then doing a literature search
-for pairs of the above, in order to find others listed.
+to estimate malaria prevalence on Bioko Island.
+
+Gridded datasets were included if a) they were publicly available b) they cover
+most of Africa c) for the last five years, and d) they include spatial
+information at a subnational level.
+
+* Included datasets
+  - LandScan from ORNL
+  - WorldPop's Constrained and Unconstrained datasets
+  - Facebook and CIESIN's High resolution settlement layer
+  - Gridded Population of the World (GPWv4.11).
+
+* Excluded datasets of note
+  - ESRI's World Population Estimate, because it is commercial.
+  - Global Rural-Urban Mapping Project (GRUMPv1), because it covers 1990-2000 only.
+  - JRC's European GHS Population Grid, because it is superseded by GPW.
+  - U.S. Census Bureaus's country grids (Demobase). This covers only three countries: Haiti, South Sudan, and Pakistan.
 
 4. Specify the inclusion and exclusion criteria. Identify all ad-hoc exclusions.
 The gridded maps chosen are all those public
