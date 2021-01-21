@@ -723,8 +723,8 @@ scatter1k_wpu_count()
 ```{r scatter1k_figure, dpi = 150, fig.height = 14, fig.width = 8}
 make_figure <- function() {
   #par(mfrow = c(5, 2), mar = c(5, 4.2, 3, 2))
-  par(mfrow = c(5, 2), mar = c(4, 3, 3, 2))
-  scatter1k_together()
+  par(mfrow = c(4, 2), mar = c(4, 3, 3, 2))
+  # scatter1k_together()
   scatter1k_ls()
   scatter1k_hrsl()
   scatter1k_wpc()
@@ -958,8 +958,8 @@ density_kernel_figure(1.2, 2, "C")
 ```{r cdf_pdf, dpi = 150}
 cdf_figure <- function() {
   par(mfrow = c(3, 1), mar = c(5, 5, 3, 2))
-  cdfAreaFigure(2)
-  logPopAreaFigure(2)
+  cdfAreaFigure(2, label = "A")
+  logPopAreaFigure(2, label = "B")
   density_kernel_figure(1.2, 2, "C")
 }
 save_plot(cdf_figure, "CDF")
@@ -1094,7 +1094,7 @@ pdfAreaFigure <- function(lb = "") {
     xaxt = "n",
     xlab = "",
     ylab = "Proportion",
-    main = ""
+    main = lb
     )
   axis(1, c(2, 2:5 + 0.5), c(0,1,50,250,1000))
 
@@ -1119,6 +1119,7 @@ pdfAreaFigure <- function(lb = "") {
 
   legend("topright", legend = sources_ordered, col = colors[sources_ordered],
          lty = 1, lwd = 2, cex = 1, bg = "white")
+  #mtext("A", side = 3, line = 0.2, outer = FALSE, cex = 1.6)
 }
 
 pdfAreaFigure()
@@ -1217,10 +1218,10 @@ PPVProfile(sens_y, "Sensitivity")
 ```{r area_figure_all, dpi = 150}
 area_figure <- function() {
   par(new, mfrow = c(2, 2), mar = c(4, 3, 2, 2))
-  pdfAreaFigure()
-  PPVProfile(acc_y, "Accuracy")
-  PPVProfile(sens_y, "Sensitivity")
-  PPVProfile(ppv_y, "Precision")
+  pdfAreaFigure(lb = "A")
+  PPVProfile(acc_y, "Accuracy", lb = "B")
+  PPVProfile(sens_y, "Sensitivity", lb = "C")
+  PPVProfile(ppv_y, "Precision", lb = "D")
 }
 save_plot(area_figure, "AccuracyProfile")
 area_figure()
@@ -1383,7 +1384,7 @@ for (set_crs_idx in 1:length(density)) {
 qbm <- tm_shape(density[["BIMEP on HRSL coarse"]]) +
   tm_raster(title = "Population", palette = qpal, breaks = qbreaks, labels = qnames) +
   tm_layout(title = "BIMEP", frame = FALSE) +
-  tm_legend(show = TRUE, legend.position = c("left", "bottom"))
+  tm_legend(show = TRUE, legend.position = c(0.02, .01))
 
 qwpc <- tm_shape(density[["WorldPop-C on WorldPop coarse"]]) +
   tm_raster(title = "qwpc", palette = qpal, breaks = qbreaks, labels = qnames) +
@@ -1452,9 +1453,13 @@ tm_shape(landscan_closeup + 0.1) +
 
 ```{r by_extent}
 bcropped <- raster::crop(bmaps[1][[1]], bcrop)
+fig2_order <- c("BIMEP", "LandScan", "HRSL", "WorldPop-C", "GPW", "WorldPop-U")
+stopifnot(all(fig2_order %in% short_names))
+stopifnot(all(short_names %in% fig2_order))
 # Adding 0.1 is a way to put integers in the middle of the breakpoints.
-small_maps <- lapply(1:length(short_names), function(map_idx) {
-  crop_map <- raster::crop(bmaps[map_idx][[1]], bcrop) + 0.1
+small_maps <- lapply(1:length(fig2_order), function(map_idx) {
+  chosen_bmap <- which(startsWith(names(bmaps), fig2_order[map_idx]))
+  crop_map <- raster::crop(bmaps[chosen_bmap][[1]], bcrop) + 0.1
   # For maps with 10x the side length.
   density_adjust <- (.3 / 360)^2 / prod(raster::res(crop_map))
   tm_shape(crop_map * density_adjust) +
