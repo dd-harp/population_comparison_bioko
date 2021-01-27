@@ -1504,3 +1504,190 @@ bmaps <- density[c(3, 12, 4)]  # bimep, worldpop, hrsl
 raster::plot(raster::crop(bmaps[1][[1]], bcrop))
 ```
 
+# Figure 7: PR by Population
+
+This makes the plot for figure 7.
+```{r}
+cdfAreaLines <- function(H, source, resolution, linewidth = 2) {
+  H <- sort(H)
+  area <-  c(1:length(H)) / length(H)
+  lines(
+    area,
+    cumsum(H) / sum(H),
+    col = colors[source],
+    lwd = linewidth,
+    lty = ifelse(resolution == "coarse", 1, 2)
+    )
+}
+
+cdfAreaFigure <- function(llwd = 1, label = "") {
+  plot(
+    vector(mode = "numeric", length = 0),
+    xlim = c(0, 1), ylim = c(0, 1),
+    xlab =  "% Area", ylab =  "Proportion of Population",
+    main = label
+    )
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
+  for (source in sources) {
+    for (resolution in c("coarse", "fine")) {
+      if (source == "BIMEP") {
+        data <- linear_from_source_resolution("HRSL", resolution, density)$x
+      } else {
+        data <- linear_from_source_resolution(source, resolution, density)$y
+      }
+      cdfAreaLines(data, source, resolution, linewidth = llwd)
+    }
+  }
+  legend("topleft", legend =  sources, col = colors[sources],
+         lty = 1, lwd = 2, cex = 1)
+}
+
+#cdfAreaFigure(2)
+```
+
+```{r}
+# Get the pfpr data.
+source_data <- "/home/adolgert/dev/popbioko/inst/extdata/source"
+load(file.path(source_data, "popData_image.RData"))
+load(file.path(source_data, "pfpr_pops.RData"))
+popk2 <- distinct(popk, popk$areaId, .keep_all = T)
+poppr <- merge(mcprk, popk2, by = "areaId", all.x = T)
+poppr <- poppr[!is.na(poppr$pop1k), ]
+
+PfPR <- poppr$pfpr
+
+H0 <- poppr$pop1k / sum(poppr$pop1k, na.rm = T)
+H1 <- poppr$wppop / sum(poppr$wppop, na.rm = T)
+H2 <- poppr$lspop / sum(poppr$lspop, na.rm = T)
+H3 <- poppr$popfb / sum(poppr$popfb, na.rm = T)
+```
+
+```{r}
+library(st)
+library(sf)
+areas_sf <- sf::st_as_sf(areasgr)
+areas_df <- sf::st_set_geometry(areas_sf, NULL)
+stopifnot(all(sort(areas_df[[1]]) == areas_df[[1]]))
+library(raster)
+sources <- c(
+  "BIMEP on HRSL fine", "HRSL on HRSL fine", "LandScan on LandScan fine",
+  "WorldPop-C on WorldPop fine", "WorldPop-U on WorldPop fine", "GPW on LandScan fine")
+aligned <- list()
+for (align_source in sources) {
+  base_name <- strsplit(align_source, " ")[[1]][1]
+  save_name <- paste0(base_name, "_gr.Rda")
+  if (file.exists(save_name)) {
+    aligned[[align_source]] <- local({
+      load(save_name)
+      bimep_gr
+    })
+  } else {
+    density_map <- density[[align_source]]
+    bimep_gr <- raster::extract(
+      density_map, areasgr, cellnumbers = TRUE, method = "bilinear",
+      na.rm = TRUE, fun = mean)
+    save(bimep_gr, file = save_name)
+    aligned[[align_source]] <- bimep_gr
+  }
+}
+on_bgrid <- lapply(aligned, function(pop_matrix) {
+  pm <- as.array(pop_matrix)
+  pm[is.nan(pm)] <- 0  # Also an artifact.
+  pm[pm < 0] <- 0  # largest negative is 10^-11. From bilinear interpolation.
+  pm
+  })
+on_bgrid[["areaId"]] <- areas_df[["FID"]]
+on_bgrid_df <- do.call(data.frame, on_bgrid)
+poppr <- merge(mcprk, on_bgrid_df, by = "areaId", all.x = TRUE)
+poppr <- poppr[complete.cases(poppr),]
+row.is.finite <- apply(poppr, 1, function(x) any(is.finite(x)))
+poppr <- poppr[row.is.finite, ]
+```
+
+
+```{r}
+prBYh_cdf <- function(Pf, H, B = 100) {
+  xx <- seq(0, 1, length.out = B + 1)
+  cdf <- 0 * xx
+  for (i in 0:B) {
+    ix <- which(Pf <= xx[i + 1])
+    cdf[i + 1] <- ifelse(length(ix) == 0, 0, sum(H[ix]))
+  }
+  cbind(xx, cdf)
+}
+
+prBYh_pdf <- function(Pf, H, B = 100) {
+  xx <- prBYh_cdf(Pf, H, B)
+  xmid <- (xx[-1, 1] + xx[-B - 1, 1]) / 2
+  pdf <- diff(xx[, 2])
+  cbind(xmid, pdf)
+}
+
+cdfPfPlot <- function(Pf, H, B = 100, clr = "black", llwd = 2) {
+  xx <- prBYh_cdf(Pf, H, B)
+  plot(xx[, 1], xx[, 2],
+    type = "l", xlab = "PfPR", ylab = "Population fraction",
+    main = "A", lwd = llwd, col = clr, xlim = c(0, .45),
+    ylim = c(0, 1)
+  )
+}
+
+cdfPfLines <- function(Pf, H, B = 100, clr = "red", llwd = 2) {
+  xx <- prBYh_cdf(Pf, H, B)
+  lines(xx[, 1], xx[, 2], lwd = llwd, col = clr)
+}
+
+pdfPfPlot <- function(Pf, H, B = 100, llwd = 2, clr = "black") {
+  xx <- prBYh_pdf(Pf, H, B)
+  plot(xx[, 1], xx[, 2], col = clr, type = "l", lwd = llwd, xlim = c(0, .45), ylim = c(0, 0.30), xlab = "PfPR", ylab = "Population fraction", main = "B")
+}
+
+pdfPfLines <- function(Pf, H, B = 100, clr = "red", llwd = 2) {
+  xx <- prBYh_pdf(Pf, H, B)
+  lines(xx[, 1], xx[, 2], col = clr, lwd = llwd)
+}
+
+PfPR <- poppr$pfpr
+sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop.C", "WorldPop.U", "GPW")
+pop_cols <- vapply(sources, function(x) names(poppr)[startsWith(names(poppr), x)], character(1))
+
+pfprFigure <- function() {
+  par(mfrow = c(1, 2))
+  for (cdf_idx in seq(pop_cols)) {
+    BB <- 80
+    pops <- poppr[[pop_cols[cdf_idx]]]
+    normed_data <- pops / sum(pops)
+    short_name <- gsub("\\.", "-", names(pop_cols)[cdf_idx])
+    if (cdf_idx == 1) {
+      cdfPfPlot(PfPR, normed_data, BB, clr = colors[short_name])
+    } else {
+      cdfPfLines(PfPR, normed_data, BB, clr = colors[short_name])
+    }
+  }
+
+  short_names <- character(0)
+  colors_used <- character(0)
+  for (pdf_idx in seq(pop_cols)) {
+    pops <- poppr[[pop_cols[pdf_idx]]]
+    normed_data <- pops / sum(pops)
+    short_name <- gsub("\\.", "-", names(pop_cols)[pdf_idx])
+    if (pdf_idx == 1) {
+      pdfPfPlot(PfPR, normed_data, BB, clr = colors[short_name])
+    } else {
+      pdfPfLines(PfPR, normed_data, BB, clr = colors[short_name])
+    }
+    short_names <- c(short_names, short_name)
+    colors_used <- c(colors_used, colors[short_name])
+  }
+  legend("topright",
+    legend = short_names, col = colors_used,
+    lty = 1, lwd = 2, cex = 1
+  )
+}
+
+pfprFigure()
+pdf("PRbypop_.pdf", width = 10, height = 5)
+pfprFigure()
+a <- dev.off()
+```
+
