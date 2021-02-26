@@ -658,21 +658,21 @@ scatter1k_together()
 ```{r plot_landscan_density, dpi = 150}
 scatter1k_ls <- function() pop_scatter(
   "LandScan", "coarse",
-  density_label, "B) LandScan", maximum1k)
+  density_label, "A) LandScan", maximum1k)
 scatter1k_ls()
 ```
 
 ```{r plot_hrsl_density, dpi = 150}
 scatter1k_hrsl <- function() pop_scatter(
   rep("HRSL", 2), c("fine", "coarse"),
-  density_label, "C) HRSL", maximum1k, background = 1)
+  density_label, "B) HRSL", maximum1k, background = 1)
 scatter1k_hrsl()
 ```
 
 ```{r plot_woldpop_c_density, dpi = 150}
 scatter1k_wpc <- function() pop_scatter(
   rep("WorldPop-C", 2), c("fine", "coarse"),
-  density_label, "D) WorldPop-C", maximum1k, background = 1)
+  density_label, "C) WorldPop-C", maximum1k, background = 1)
 scatter1k_wpc()
 ```
 
@@ -680,7 +680,7 @@ scatter1k_wpc()
 ```{r plot_woldpop_u_density, dpi = 150}
 scatter1k_wpu <- function() pop_scatter(
   rep("WorldPop-U", 2), c("fine", "coarse"),
-  density_label, "E) WorldPop-U", maximum1k, background = 1)
+  density_label, "D) WorldPop-U", maximum1k, background = 1)
 scatter1k_wpu()
 ```
 
@@ -688,7 +688,7 @@ scatter1k_wpu()
 ```{r plot_woldpop_gpw_density, dpi = 150}
 scatter1k_gpw <- function() pop_scatter(
   rep("GPW", 2), c("fine", "coarse"),
-  density_label, "F) GPW", maximum1k, background = 1)
+  density_label, "E) GPW", maximum1k, background = 1)
 scatter1k_gpw()
 ```
 
@@ -707,7 +707,7 @@ maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
 scatter1k_wpc_count <- function() pop_scatter(
   rep("WorldPop-C", 1), c("fine"),
-  pop_scatter_label, "F) WP-C, 100x100 m", maximum100, counts = TRUE)
+  pop_scatter_label, "G) WP-C, 100x100 m", maximum100, counts = TRUE)
 scatter1k_wpc_count()
 ```
 
@@ -716,7 +716,7 @@ maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
 scatter1k_wpu_count <- function() pop_scatter(
   rep("WorldPop-U", 1), c("fine"),
-  pop_scatter_label, "F) WP-U, 100x100 m", maximum100, counts = TRUE)
+  pop_scatter_label, "H) WP-U, 100x100 m", maximum100, counts = TRUE)
 scatter1k_wpu_count()
 ```
 

@@ -360,7 +360,7 @@ stopifnot(raster::res(gpw) == raster::res(landscan))
 ```
 Therefore, disaggregate this like we did LandScan.
 
-```{r disaggregate_landscan}
+```{r disaggregate_gpw}
 factor <- 10
 gpw100 <- raster::disaggregate(gpw, fact = factor) / factor^2
 popbioko::write_aligned_raster(
