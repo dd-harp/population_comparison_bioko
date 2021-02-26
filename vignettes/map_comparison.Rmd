@@ -59,7 +59,7 @@ maps <- lapply(files, function(x) raster::raster(fs::path(map_root, x)))
 names(maps) <- rownames(files_df)
 files_df
 ```
-There are 12 rows for (3 data sources) x (2 resolutions each) x (data source and BIMEP comparison).
+There are 16 rows for (5 data sources) x (2 resolutions each) x (data source and BIMEP comparison).
 
 We will need some canonical projections, too. Universal Transverse Mercator (UTM)
 is a projection that will give us the island measured in meters.
@@ -322,6 +322,29 @@ as.data.frame(t(show1000_df[as.numeric(show1000_df$resolution) < 500, ]))
 as.data.frame(t(show1000_df[as.numeric(show1000_df$resolution) > 500, ]))
 ```
 
+```{r paper_version_show1000}
+display_order <- data.frame(
+  source = c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW", "BIMEP", "HRSL", "WorldPop-C", "WorldPop-U"),
+  granularity = c(rep("coarse", 6), rep("fine", 4)),
+  grid = c("HRSL", "HRSL", "LandScan", "WorldPop", "WorldPop", "LandScan", "HRSL", "HRSL", "WorldPop", "WorldPop")
+)
+short_source <- c(
+  BIMEP = "BIMEP", HRSL = "HRSL", LandScan = "LS", "WorldPop-C" = "WP-C",
+  "WorldPop-U" = "WP-U", GPW = "GPW")
+show1000_df$granularity <- ifelse(as.numeric(show1000_df$resolution) < 500, rep("fine", nrow(show1000_df)), rep("coarse", nrow(show1000_df)))
+show1000_df
+display_order
+do1000_df <- merge(display_order, show1000_df, by = c("source", "granularity", "grid"), sort = TRUE)
+stopifnot(nrow(do1000_df) == nrow(display_order))
+ord1000_df <- do.call(rbind, lapply(1:nrow(display_order), function(row_idx) {
+  with(do1000_df, do1000_df[source == display_order[row_idx, "source"] & granularity == display_order[row_idx, "granularity"], ])
+}))
+col_ord_df <- ord1000_df[, c("source", "resolution", "total", "max_density", "empty_percent", "urban_raw", "pareto_fraction")]
+col_ord_df$source <- short_source[col_ord_df$source]
+col_ord_df
+```
+Use this on command line: `knitr::kable(t(col_ord_df), format = "latex")`
+
 ## Error Bounds
 
 Carlos asked how much the exact alignment of the grid matters.
@@ -332,10 +355,17 @@ a bunch of times and see what the values are.
 ```{r error_bounds, eval = FALSE}
 # With side_len = 10, this can take two hours to run.
 error_dir <- fs::path(params$data_directory, "errors")
+if (!dir.exists(error_dir)) {
+  dir.create(error_dir)
+}
 side_len <- 10
 for (grid in c("landscan", "hrsl", "worldpop")) {
   stats_file <- fs::path(error_dir, paste(grid, "csv", sep = "."))
-  popbioko::summary_statistics_multiple_grids(grid, side_len, stats_file)
+  if (!file.exists(stats_file)) {
+    popbioko::summary_statistics_multiple_grids(grid, side_len, stats_file)
+  } else {
+    warning(paste("file already exists", stats_file))
+  }
 }
 ```
 
@@ -455,7 +485,7 @@ ans_df <- single_ci(consider_error[1])
 for (col in consider_error[2:length(consider_error)]) {
   ans_df <- merge(ans_df, single_ci(col))
 }
-ans_df
+t(ans_df)
 ```
 
 ## Discussion
@@ -494,7 +524,7 @@ use the count of people in a pixel.
 
 Set up consistent colors for the different data sets.
 ```{r set_sources, echo = FALSE}
-sources_ordered <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+sources_ordered <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
 # Viridis is causing problems in one installation, so let's make our own.
 color_component <- function(x) sprintf("%02x", floor(ifelse(x >= 1.0, 255, x * 256.0)))
 as_color <- function(xxx) paste(
@@ -505,12 +535,12 @@ viridis_mock <- function(n) {
   colorRampPalette(key_colors)(n)
 }
 #viridis_colors <- viridis::plasma(8, alpha = 1, begin = 0, end = 1)[c(1, 3, 5, 7)]
-viridis_colors <- viridis_mock(8)[c(1, 3, 5, 7)]
+viridis_colors <- viridis_mock(length(sources_ordered))
 ```
 
 ```{r set_colors, echo = FALSE}
 colors <- c(viridis_colors, grDevices::grey(0.7))
-names(colors) <- c("BIMEP", "WorldPop", "LandScan", "HRSL", "grey")
+names(colors) <- c(sources_ordered, "grey")
 logarithmic_axis_labels <- c(
   "1", "10", "100", "1,000", expression(10^4), expression(10^5), expression(10^6))
 ```
@@ -530,13 +560,28 @@ names(symbol_size) <- c("coarse", "fine")
 symbol_choice <- c(19, 15)
 names(symbol_choice) <- c("coarse", "fine")
 
+check_name <- function(value, which, res, source) {
+  if (length(value) != 1) {
+    cat(sprintf("Could not find %s-%s-%s\n", which, res, source))
+  }
+  value
+}
 
 map_from_source_resolution <- function(source, resolution, map_list) {
-  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == source, ]
-  x_map_name <- xy_df[xy_df$source == "BIMEP", "name"]
-  y_map_name <- xy_df[xy_df$source == source, "name"]
-  x <- raster::getValues(map_list[[x_map_name]])
-  y <- raster::getValues(map_list[[y_map_name]])
+  grid_to_use <- unique(files_df[files_df$source == source, "grid"])
+  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == grid_to_use, ]
+  x_map_name <- check_name(xy_df[xy_df$source == "BIMEP", "name"], "bimep", resolution, source)
+  y_map_name <- check_name(xy_df[xy_df$source == source, "name"], "y", resolution, source)
+  gv <- function(a_map_name) {
+    if (!a_map_name %in% names(map_list)) {
+      msg <- sprintf("%s not in map names", a_map_name)
+      cat(paste(msg, "\n"))
+      stop(msg)
+    }
+    raster::getValues(map_list[[a_map_name]])
+  }
+  x <- gv(x_map_name)
+  y <- gv(y_map_name)
   list(x = logoff(x), y = logoff(y))
 }
 
@@ -598,11 +643,13 @@ maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, 
 
 scatter1k_together <- function() {
   maximum1k <- 1.01 * max(density_from_source_resolution("LandScan", "coarse")$y, na.rm = TRUE)
-  the_three <- c("HRSL", "LandScan", "WorldPop")
-  pop_scatter(
-    c(the_three, "HRSL", "WorldPop"), c(rep("coarse", 3), rep("fine", 2)),
-    density_label, "A", maximum1k)
-  legend("topleft", legend =  the_three, col = colors[the_three],
+  subjects <- c("HRSL", "LandScan", "WorldPop-C", "WorldPop-U",
+                "GPW", "HRSL", "WorldPop-C", "WorldPop-U")
+  uniq_cnt <- length(unique(subjects))
+  resolution <- c(rep("coarse", uniq_cnt), rep("fine", length(subjects) - uniq_cnt))
+  pop_scatter(subjects, resolution, density_label, "A", maximum1k)
+  uniq <- unique(subjects)
+  legend("topleft", legend =  uniq, col = colors[uniq],
              lty = 1, lwd = 2, cex = 1, bg = "white", bty = "n")
 }
 scatter1k_together()
@@ -611,23 +658,40 @@ scatter1k_together()
 ```{r plot_landscan_density, dpi = 150}
 scatter1k_ls <- function() pop_scatter(
   "LandScan", "coarse",
-  density_label, "B) LandScan", maximum1k)
+  density_label, "A) LandScan", maximum1k)
 scatter1k_ls()
 ```
 
 ```{r plot_hrsl_density, dpi = 150}
 scatter1k_hrsl <- function() pop_scatter(
   rep("HRSL", 2), c("fine", "coarse"),
-  density_label, "C) HRSL", maximum1k, background = 1)
+  density_label, "B) HRSL", maximum1k, background = 1)
 scatter1k_hrsl()
 ```
 
-```{r plot_woldpop_density, dpi = 150}
-scatter1k_wp <- function() pop_scatter(
-  rep("WorldPop", 2), c("fine", "coarse"),
-  density_label, "D) WorldPop", maximum1k, background = 1)
-scatter1k_wp()
+```{r plot_woldpop_c_density, dpi = 150}
+scatter1k_wpc <- function() pop_scatter(
+  rep("WorldPop-C", 2), c("fine", "coarse"),
+  density_label, "C) WorldPop-C", maximum1k, background = 1)
+scatter1k_wpc()
 ```
+
+
+```{r plot_woldpop_u_density, dpi = 150}
+scatter1k_wpu <- function() pop_scatter(
+  rep("WorldPop-U", 2), c("fine", "coarse"),
+  density_label, "D) WorldPop-U", maximum1k, background = 1)
+scatter1k_wpu()
+```
+
+
+```{r plot_woldpop_gpw_density, dpi = 150}
+scatter1k_gpw <- function() pop_scatter(
+  rep("GPW", 2), c("fine", "coarse"),
+  density_label, "E) GPW", maximum1k, background = 1)
+scatter1k_gpw()
+```
+
 ```{r pop_scatter_hrsl100, dpi = 150}
 maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
@@ -641,22 +705,34 @@ scatter1k_hrsl_count()
 ```{r pop_scatter_wp100, dpi = 150}
 maximum100 <- 6.2
 pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
-scatter1k_wp_count <- function() pop_scatter(
-  rep("WorldPop", 1), c("fine"),
-  pop_scatter_label, "F) WP, 100x100 m", maximum100, counts = TRUE)
-scatter1k_wp_count()
+scatter1k_wpc_count <- function() pop_scatter(
+  rep("WorldPop-C", 1), c("fine"),
+  pop_scatter_label, "G) WP-C, 100x100 m", maximum100, counts = TRUE)
+scatter1k_wpc_count()
 ```
 
+```{r pop_scatter2_wp100, dpi = 150}
+maximum100 <- 6.2
+pop_scatter_label <- c("BIMEP 100x100 m", "Population Size")
+scatter1k_wpu_count <- function() pop_scatter(
+  rep("WorldPop-U", 1), c("fine"),
+  pop_scatter_label, "H) WP-U, 100x100 m", maximum100, counts = TRUE)
+scatter1k_wpu_count()
+```
 
-```{r scatter1k_figure, dpi = 150}
+```{r scatter1k_figure, dpi = 150, fig.height = 14, fig.width = 8}
 make_figure <- function() {
-  par(mfrow = c(3, 2), mar = c(5, 4.2, 3, 2))
-  scatter1k_together()
+  #par(mfrow = c(5, 2), mar = c(5, 4.2, 3, 2))
+  par(mfrow = c(4, 2), mar = c(4, 3, 3, 2))
+  # scatter1k_together()
   scatter1k_ls()
   scatter1k_hrsl()
-  scatter1k_wp()
+  scatter1k_wpc()
+  scatter1k_wpu()
+  scatter1k_gpw()
   scatter1k_hrsl_count()
-  scatter1k_wp_count()
+  scatter1k_wpc_count()
+  scatter1k_wpu_count()
 }
 popbioko::save_plot(make_figure, "scatter1k")
 make_figure()
@@ -670,7 +746,8 @@ one part to generate x and y data and one part to decide axes and such for that 
 
 ```{r linear_from_source_resolution}
 linear_from_source_resolution <- function(source, resolution, map_list) {
-  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == source, ]
+  grid <- unique(files_df[files_df$source == source, "grid"])
+  xy_df <- files_df[files_df$resolution == resolution & files_df$grid == grid, ]
   x_map_name <- xy_df[xy_df$source == "BIMEP", "name"]
   y_map_name <- xy_df[xy_df$source == source, "name"]
   x <- raster::getValues(map_list[[x_map_name]])
@@ -678,7 +755,7 @@ linear_from_source_resolution <- function(source, resolution, map_list) {
   list(x = x, y = y)
 }
 
-sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
 
 # This draws each line for the plots, taking care of color and line type.
 lines_for_datasets <- function(datasets, linewidth) {
@@ -717,7 +794,7 @@ cdfAreaFigure <- function(llwd = 1, label = "") {
     xlab =  "% Area", ylab =  "Proportion of Population",
     main = label
     )
-  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop")
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
   for (source in sources) {
     for (resolution in c("coarse", "fine")) {
       if (source == "BIMEP") {
@@ -807,7 +884,11 @@ log_density <- function(H, base_power = 2) {
   c2 <- ceiling(max(log(H[H > 0], base = base_power)))
   ixz <- which(H <= 0)
   upper <- 0
-  HH <- H[-ixz]
+  if (length(ixz) > 0) {
+    HH <- H[-ixz]
+  } else {
+    HH <- H
+  }
   Pz <- length(ixz)
   for (i in 1:c2) {
     upper <- c(upper, base_power^(i - 1))
@@ -877,8 +958,8 @@ density_kernel_figure(1.2, 2, "C")
 ```{r cdf_pdf, dpi = 150}
 cdf_figure <- function() {
   par(mfrow = c(3, 1), mar = c(5, 5, 3, 2))
-  cdfAreaFigure(2)
-  logPopAreaFigure(2)
+  cdfAreaFigure(2, label = "A")
+  logPopAreaFigure(2, label = "B")
   density_kernel_figure(1.2, 2, "C")
 }
 save_plot(cdf_figure, "CDF")
@@ -1013,7 +1094,7 @@ pdfAreaFigure <- function(lb = "") {
     xaxt = "n",
     xlab = "",
     ylab = "Proportion",
-    main = ""
+    main = lb
     )
   axis(1, c(2, 2:5 + 0.5), c(0,1,50,250,1000))
 
@@ -1038,6 +1119,7 @@ pdfAreaFigure <- function(lb = "") {
 
   legend("topright", legend = sources_ordered, col = colors[sources_ordered],
          lty = 1, lwd = 2, cex = 1, bg = "white")
+  #mtext("A", side = 3, line = 0.2, outer = FALSE, cex = 1.6)
 }
 
 pdfAreaFigure()
@@ -1135,11 +1217,11 @@ PPVProfile(sens_y, "Sensitivity")
 
 ```{r area_figure_all, dpi = 150}
 area_figure <- function() {
-  par(new, mfrow = c(2, 2))
-  pdfAreaFigure()
-  PPVProfile(acc_y, "Accuracy")
-  PPVProfile(sens_y, "Sensitivity")
-  PPVProfile(ppv_y, "Precision")
+  par(new, mfrow = c(2, 2), mar = c(4, 3, 2, 2))
+  pdfAreaFigure(lb = "A")
+  PPVProfile(acc_y, "Accuracy", lb = "B")
+  PPVProfile(sens_y, "Sensitivity", lb = "C")
+  PPVProfile(ppv_y, "Precision", lb = "D")
 }
 save_plot(area_figure, "AccuracyProfile")
 area_figure()
@@ -1152,15 +1234,18 @@ This is table 3, which has accuracy, recall, and precision for ranges of values.
 ```{r accuracy_table}
 HRSL <- fullCat(ppv_data["y", "HRSL"][[1]], ppv_data["x", "HRSL"][[1]])
 LS <- fullCat(ppv_data["y", "LandScan"][[1]], ppv_data["x", "LandScan"][[1]])
-WP <- fullCat(ppv_data["y", "WorldPop"][[1]], ppv_data["x", "WorldPop"][[1]])
+WP <- fullCat(ppv_data["y", "WorldPop-C"][[1]], ppv_data["x", "WorldPop-C"][[1]])
+WPU <- fullCat(ppv_data["y", "WorldPop-U"][[1]], ppv_data["x", "WorldPop-U"][[1]])
+GPW <- fullCat(ppv_data["y", "GPW"][[1]], ppv_data["x", "GPW"][[1]])
+
 
 # ppv <- cbind(HRSL = as.vector(HRSL$ppv), LS = as.vector(LS$ppv), WP = as.vector(WP$ppv))
 # sens <- cbind(HRSL = as.vector(HRSL$sens), LS = as.vector(LS$sens), WP = as.vector(WP$sens))
 # acc <- cbind(HRSL = as.vector(HRSL$acc), LS = as.vector(LS$acc), WP = as.vector(WP$acc))
 
-ppv <- cbind(HRSL = as.numeric(HRSL$ppv), LS = as.numeric(LS$ppv), WP = as.numeric(WP$ppv))
-sens <- cbind(HRSL = as.numeric(HRSL$sens), LS = as.numeric(LS$sens), WP = as.numeric(WP$sens))
-acc <- cbind(HRSL = as.numeric(HRSL$acc), LS = as.numeric(LS$acc), WP = as.numeric(WP$acc))
+ppv <- cbind(HRSL = as.numeric(HRSL$ppv), LS = as.numeric(LS$ppv), WPC = as.numeric(WP$ppv), WPU = as.numeric(WPU$ppv), GPW = as.numeric(GPW$ppv))
+sens <- cbind(HRSL = as.numeric(HRSL$sens), LS = as.numeric(LS$sens), WPC = as.numeric(WP$sens), WPU = as.numeric(WPU$sens), GPW = as.numeric(GPW$sens))
+acc <- cbind(HRSL = as.numeric(HRSL$acc), LS = as.numeric(LS$acc), WPC = as.numeric(WP$acc), WPU = as.numeric(WPU$acc), GPW = as.numeric(GPW$acc))
 accuracy_as_table <- signif(cbind(acc, sens, ppv), 3)
 rownames(accuracy_as_table) <- rownames(HRSL)
 t(accuracy_as_table)
@@ -1198,8 +1283,8 @@ calculate_gofr <- function(normalize_gofr, gofr_map_type) {
 admin_names <- c("Baney", "Malabo", "Luba", "Riaba")
 # If these are out of order, then the names in admin_names are in the wrong order.
 stopifnot(admin2_sf$OBJECTID == 1:4)
-gofr <- unique(files_df[, c("grid", "resolution")])
-rownames(gofr) <- paste(gofr$grid, gofr$resolution)
+gofr <- files_df[files_df$source != "BIMEP", ]
+rownames(gofr) <- paste(gofr$source, gofr$resolution)
 gofr$GOFR <- numeric(nrow(gofr))
 gofr$Baney <- numeric(nrow(gofr))
 gofr$Malabo <- numeric(nrow(gofr))
@@ -1231,11 +1316,15 @@ gofr_of_maps <- function(pops_map, pops_bimep, normalize = FALSE) {
 }
 
 for (gofr_make_idx in 1:nrow(gofr)) {
+  gofr_source <- gofr[gofr_make_idx, "source"]
   gofr_grid <- gofr[gofr_make_idx, "grid"]
   gofr_resolution <- gofr[gofr_make_idx, "resolution"]
-  gofr_pair_df <- files_df[files_df$grid == gofr_grid & files_df$resolution == gofr_resolution, ]
-  pops_bimep <- raster::getValues(gofr_map_type[gofr_pair_df[gofr_pair_df$source == "BIMEP", "name"]][[1]])
-  compare_map <- gofr_map_type[gofr_pair_df[gofr_pair_df$source != "BIMEP", "name"]][[1]]
+  bimep_name <- files_df[
+    files_df$grid == gofr_grid & files_df$resolution == gofr_resolution & files_df$source == "BIMEP",
+    "name"
+    ]
+  pops_bimep <- raster::getValues(gofr_map_type[bimep_name][[1]])
+  compare_map <- gofr_map_type[gofr[gofr_make_idx, "name"]][[1]]
   pops_map <- raster::getValues(compare_map)
   stopifnot(length(pops_bimep) == length(pops_map))
   
@@ -1257,7 +1346,7 @@ gofr
 gofr_map_type <- maps
 gofr_absolute <- calculate_gofr(FALSE, gofr_map_type)
 gofr_normalized <- calculate_gofr(TRUE, gofr_map_type)
-choose <- c(2, 3, 6)
+choose <- 1:nrow(gofr_normalized)
 cols <- c("grid", "resolution", "GOFR", "Baney", "Luba", "Malabo", "Riaba")
 gofr_table <- rbind(gofr_absolute[choose, cols], gofr_normalized[choose, cols])
 gofr_table
@@ -1265,13 +1354,14 @@ gofr_table
 The incoming maps are HRSL fine, WorldPop fine, and LandScan coarse.
 ```{r gofr_table, eval = FALSE}
 # This is here to show how to get the table into LaTeX. Add format = "latex" to the line below.
+# You'll want to run this in the terminal and copy to the document.
 knitr::kable(t(gofr_table[, !names(gofr_table) %in% c("resolution")]), digits = 4)
 ```
 
 
 Let's remind ourselves what the WorldPop looks like, because those numbers are huge.
 ```{r plot_wp_again}
-plot(maps[["WorldPop on WorldPop fine"]])
+plot(maps[["WorldPop-U on WorldPop fine"]])
 ```
 # Map Plots
 We need a couple of pretty plots.
@@ -1294,11 +1384,19 @@ for (set_crs_idx in 1:length(density)) {
 qbm <- tm_shape(density[["BIMEP on HRSL coarse"]]) +
   tm_raster(title = "Population", palette = qpal, breaks = qbreaks, labels = qnames) +
   tm_layout(title = "BIMEP", frame = FALSE) +
-  tm_legend(show = TRUE)
+  tm_legend(show = TRUE, legend.position = c(0.02, .01))
 
-qwp <- tm_shape(density[["WorldPop on WorldPop coarse"]]) +
-  tm_raster(title = "qwp", palette = qpal, breaks = qbreaks, labels = qnames) +
-  tm_layout(title = "WorldPop", frame = FALSE) + tm_legend(show = qleg)
+qwpc <- tm_shape(density[["WorldPop-C on WorldPop coarse"]]) +
+  tm_raster(title = "qwpc", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "WorldPop-C", frame = FALSE) + tm_legend(show = qleg)
+
+qwpu <- tm_shape(density[["WorldPop-U on WorldPop coarse"]]) +
+  tm_raster(title = "qwpu", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "WorldPop-U", frame = FALSE) + tm_legend(show = qleg)
+
+gpw <- tm_shape(density[["GPW on LandScan coarse"]]) +
+  tm_raster(title = "gpw", palette = qpal, breaks = qbreaks, labels = qnames) +
+  tm_layout(title = "GPW", frame = FALSE) + tm_legend(show = qleg)
 
 qls <- tm_shape(density[["LandScan on LandScan coarse"]]) +
   tm_raster(title = "qls", palette = qpal, breaks = qbreaks, labels = qnames) +
@@ -1308,22 +1406,81 @@ qhrsl <- tm_shape(density[["HRSL on HRSL coarse"]]) +
   tm_raster(title = "qhrsl", palette = qpal, breaks = qbreaks, labels = qnames) +
   tm_layout(title = "HRSL", frame = FALSE) + tm_legend(show = qleg)
 
-quadmap <- tmap_arrange(qbm, qwp, qls, qhrsl, ncol = 2, nrow = 2)
+quadmap <- tmap_arrange(qbm, qls, qhrsl, qwpc, gpw, qwpu, ncol = 2, nrow = 3)
 tmap_save(quadmap, "islandquad.png")
 tmap_save(quadmap, "islandquad.pdf")
 quadmap
 ```
 
-```{r by_extent}
+```{r map_setup_closeup}
 library(tmap)
 bcrop <- raster::extent(c(8.685, 8.85, 3.65, 3.80))  # for maps, not densities.
 #bcrop <- raster::extent(c(440000, 490000, 350000, 424000))
-bmaps <- maps[c(3, 12, 4)]  # bimep, worldpop, hrsl
+original_map_names <- c(
+ "BIMEP on HRSL fine",
+ "HRSL on HRSL fine",
+ "LandScan on LandScan coarse",
+ "WorldPop-C on WorldPop fine",
+ "GPW on LandScan coarse",
+ "WorldPop-U on WorldPop fine"
+)
+short_names <- vapply(strsplit(original_map_names, " "), function(x) x[[1]], FUN.VALUE = character(1))
+bmaps <- maps[original_map_names]
 bbreaks <- c(0, 1, 5, 10, 50, 100)
 bnames <- c("0-1", "1-5", "5-10", "10-50", "50-100")
 #bnames[seq(2, length(bnames), 2)] <- ""
 bpal <- c("#BBBBBBFF", viridis_mock(length(bbreaks) - 1))
+```
+
+The LandScan plot doesn't look right, so let's take a closer look before
+including it with the rest.
+```{r test_landscan_plot}
+map_idx <- 3
+landscan_closeup <- raster::crop(bmaps[map_idx][[1]], bcrop)
+raster::res(landscan_closeup)[[1]]
+prod(raster::res(landscan_closeup))
+raster::plot(landscan_closeup, colNA="black")
+raster::hist(landscan_closeup)
+vv <- raster::getValues(landscan_closeup)
+c(min(vv, na.rm = TRUE), max(vv, na.rm = TRUE))
+vv
+tm_shape(landscan_closeup + 0.1) +
+  tmap_options(max.categories = 1936) +
+  tm_raster(colorNA = "black") +
+  tm_layout(frame = TRUE)
+```
+
+
+```{r by_extent}
 bcropped <- raster::crop(bmaps[1][[1]], bcrop)
+fig2_order <- c("BIMEP", "LandScan", "HRSL", "WorldPop-C", "GPW", "WorldPop-U")
+stopifnot(all(fig2_order %in% short_names))
+stopifnot(all(short_names %in% fig2_order))
+# Adding 0.1 is a way to put integers in the middle of the breakpoints.
+small_maps <- lapply(1:length(fig2_order), function(map_idx) {
+  chosen_bmap <- which(startsWith(names(bmaps), fig2_order[map_idx]))
+  crop_map <- raster::crop(bmaps[chosen_bmap][[1]], bcrop) + 0.1
+  # For maps with 10x the side length.
+  density_adjust <- (.3 / 360)^2 / prod(raster::res(crop_map))
+  tm_shape(crop_map * density_adjust) +
+  tm_raster(title = short_names[map_idx], palette = bpal, breaks = bbreaks, labels = bnames) +
+  tm_legend(show = FALSE) +
+  tm_layout(title = LETTERS[map_idx], frame = FALSE)
+})
+bleg <- tm_shape(bcropped) +
+  tm_raster(title = "Population", palette = bpal, breaks = bbreaks, labels = bnames) + 
+  tm_legend(legend.only = TRUE, position = c("center", "top"), title.size = 2, text.size = 1.5)
+small_maps[length(small_maps) + 1] <- bleg
+small_maps[c("ncol", "nrow")] <- c(2, 3)
+#closeup <- tmap_arrange(bp1, bp2, bp3, bleg, ncol = 2, nrow = 2)
+# closeup <- do.call(tmap_arrange, small_maps)
+sm <- small_maps
+closeup <- tmap_arrange(sm[[1]], sm[[2]], sm[[3]], sm[[4]], sm[[5]], sm[[6]], nrow = 3, ncol = 2)
+tmap_save(closeup, "closeup.png")
+tmap_save(closeup, "closeup.pdf")
+closeup
+```
+```{r unused_maps}
 bp1 <- tm_shape(bcropped) +
   tm_raster(title = "BIMEP", palette = bpal, breaks = bbreaks, labels = bnames) +
   tm_legend(show = FALSE) +
@@ -1336,20 +1493,201 @@ bp3 <- tm_shape(raster::crop(bmaps[3][[1]], bcrop)) +
   tm_raster(title = "HRSL", palette = bpal, breaks = bbreaks, labels = bnames) +
   tm_legend(show = FALSE) +
   tm_layout(title = "C", frame = FALSE)
-
-bleg <- tm_shape(bcropped) +
-  tm_raster(title = "Population", palette = bpal, breaks = bbreaks, labels = bnames) + 
-  tm_legend(legend.only = TRUE, position = c("center", "top"), title.size = 2, text.size = 1.5)
-closeup <- tmap_arrange(bp1, bp2, bp3, bleg, ncol = 2, nrow = 2)
-tmap_save(closeup, "closeup.png")
-tmap_save(closeup, "closeup.pdf")
-closeup
 ```
+
+
 Note, for comparison, how diffuse the density map is, because the density map
 averages over a disc that's a square kilometer in area.
 ```{r}
 bcrop <- raster::extent(c(465000, 490000, 400000, 424000))
 bmaps <- density[c(3, 12, 4)]  # bimep, worldpop, hrsl
 raster::plot(raster::crop(bmaps[1][[1]], bcrop))
+```
+
+# Figure 7: PR by Population
+
+This makes the plot for figure 7.
+```{r}
+cdfAreaLines <- function(H, source, resolution, linewidth = 2) {
+  H <- sort(H)
+  area <-  c(1:length(H)) / length(H)
+  lines(
+    area,
+    cumsum(H) / sum(H),
+    col = colors[source],
+    lwd = linewidth,
+    lty = ifelse(resolution == "coarse", 1, 2)
+    )
+}
+
+cdfAreaFigure <- function(llwd = 1, label = "") {
+  plot(
+    vector(mode = "numeric", length = 0),
+    xlim = c(0, 1), ylim = c(0, 1),
+    xlab =  "% Area", ylab =  "Proportion of Population",
+    main = label
+    )
+  sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop-C", "WorldPop-U", "GPW")
+  for (source in sources) {
+    for (resolution in c("coarse", "fine")) {
+      if (source == "BIMEP") {
+        data <- linear_from_source_resolution("HRSL", resolution, density)$x
+      } else {
+        data <- linear_from_source_resolution(source, resolution, density)$y
+      }
+      cdfAreaLines(data, source, resolution, linewidth = llwd)
+    }
+  }
+  legend("topleft", legend =  sources, col = colors[sources],
+         lty = 1, lwd = 2, cex = 1)
+}
+
+#cdfAreaFigure(2)
+```
+
+```{r}
+# Get the pfpr data.
+source_data <- "/home/adolgert/dev/popbioko/inst/extdata/source"
+load(file.path(source_data, "popData_image.RData"))
+load(file.path(source_data, "pfpr_pops.RData"))
+popk2 <- distinct(popk, popk$areaId, .keep_all = T)
+poppr <- merge(mcprk, popk2, by = "areaId", all.x = T)
+poppr <- poppr[!is.na(poppr$pop1k), ]
+
+PfPR <- poppr$pfpr
+
+H0 <- poppr$pop1k / sum(poppr$pop1k, na.rm = T)
+H1 <- poppr$wppop / sum(poppr$wppop, na.rm = T)
+H2 <- poppr$lspop / sum(poppr$lspop, na.rm = T)
+H3 <- poppr$popfb / sum(poppr$popfb, na.rm = T)
+```
+
+```{r}
+library(st)
+library(sf)
+areas_sf <- sf::st_as_sf(areasgr)
+areas_df <- sf::st_set_geometry(areas_sf, NULL)
+stopifnot(all(sort(areas_df[[1]]) == areas_df[[1]]))
+library(raster)
+sources <- c(
+  "BIMEP on HRSL fine", "HRSL on HRSL fine", "LandScan on LandScan fine",
+  "WorldPop-C on WorldPop fine", "WorldPop-U on WorldPop fine", "GPW on LandScan fine")
+aligned <- list()
+for (align_source in sources) {
+  base_name <- strsplit(align_source, " ")[[1]][1]
+  save_name <- paste0(base_name, "_gr.Rda")
+  if (file.exists(save_name)) {
+    aligned[[align_source]] <- local({
+      load(save_name)
+      bimep_gr
+    })
+  } else {
+    density_map <- density[[align_source]]
+    bimep_gr <- raster::extract(
+      density_map, areasgr, cellnumbers = TRUE, method = "bilinear",
+      na.rm = TRUE, fun = mean)
+    save(bimep_gr, file = save_name)
+    aligned[[align_source]] <- bimep_gr
+  }
+}
+on_bgrid <- lapply(aligned, function(pop_matrix) {
+  pm <- as.array(pop_matrix)
+  pm[is.nan(pm)] <- 0  # Also an artifact.
+  pm[pm < 0] <- 0  # largest negative is 10^-11. From bilinear interpolation.
+  pm
+  })
+on_bgrid[["areaId"]] <- areas_df[["FID"]]
+on_bgrid_df <- do.call(data.frame, on_bgrid)
+poppr <- merge(mcprk, on_bgrid_df, by = "areaId", all.x = TRUE)
+poppr <- poppr[complete.cases(poppr),]
+row.is.finite <- apply(poppr, 1, function(x) any(is.finite(x)))
+poppr <- poppr[row.is.finite, ]
+```
+
+
+```{r}
+prBYh_cdf <- function(Pf, H, B = 100) {
+  xx <- seq(0, 1, length.out = B + 1)
+  cdf <- 0 * xx
+  for (i in 0:B) {
+    ix <- which(Pf <= xx[i + 1])
+    cdf[i + 1] <- ifelse(length(ix) == 0, 0, sum(H[ix]))
+  }
+  cbind(xx, cdf)
+}
+
+prBYh_pdf <- function(Pf, H, B = 100) {
+  xx <- prBYh_cdf(Pf, H, B)
+  xmid <- (xx[-1, 1] + xx[-B - 1, 1]) / 2
+  pdf <- diff(xx[, 2])
+  cbind(xmid, pdf)
+}
+
+cdfPfPlot <- function(Pf, H, B = 100, clr = "black", llwd = 2) {
+  xx <- prBYh_cdf(Pf, H, B)
+  plot(xx[, 1], xx[, 2],
+    type = "l", xlab = "PfPR", ylab = "Population fraction",
+    main = "A", lwd = llwd, col = clr, xlim = c(0, .45),
+    ylim = c(0, 1)
+  )
+}
+
+cdfPfLines <- function(Pf, H, B = 100, clr = "red", llwd = 2) {
+  xx <- prBYh_cdf(Pf, H, B)
+  lines(xx[, 1], xx[, 2], lwd = llwd, col = clr)
+}
+
+pdfPfPlot <- function(Pf, H, B = 100, llwd = 2, clr = "black") {
+  xx <- prBYh_pdf(Pf, H, B)
+  plot(xx[, 1], xx[, 2], col = clr, type = "l", lwd = llwd, xlim = c(0, .45), ylim = c(0, 0.30), xlab = "PfPR", ylab = "Population fraction", main = "B")
+}
+
+pdfPfLines <- function(Pf, H, B = 100, clr = "red", llwd = 2) {
+  xx <- prBYh_pdf(Pf, H, B)
+  lines(xx[, 1], xx[, 2], col = clr, lwd = llwd)
+}
+
+PfPR <- poppr$pfpr
+sources <- c("BIMEP", "HRSL", "LandScan", "WorldPop.C", "WorldPop.U", "GPW")
+pop_cols <- vapply(sources, function(x) names(poppr)[startsWith(names(poppr), x)], character(1))
+
+pfprFigure <- function() {
+  par(mfrow = c(1, 2))
+  for (cdf_idx in seq(pop_cols)) {
+    BB <- 80
+    pops <- poppr[[pop_cols[cdf_idx]]]
+    normed_data <- pops / sum(pops)
+    short_name <- gsub("\\.", "-", names(pop_cols)[cdf_idx])
+    if (cdf_idx == 1) {
+      cdfPfPlot(PfPR, normed_data, BB, clr = colors[short_name])
+    } else {
+      cdfPfLines(PfPR, normed_data, BB, clr = colors[short_name])
+    }
+  }
+
+  short_names <- character(0)
+  colors_used <- character(0)
+  for (pdf_idx in seq(pop_cols)) {
+    pops <- poppr[[pop_cols[pdf_idx]]]
+    normed_data <- pops / sum(pops)
+    short_name <- gsub("\\.", "-", names(pop_cols)[pdf_idx])
+    if (pdf_idx == 1) {
+      pdfPfPlot(PfPR, normed_data, BB, clr = colors[short_name])
+    } else {
+      pdfPfLines(PfPR, normed_data, BB, clr = colors[short_name])
+    }
+    short_names <- c(short_names, short_name)
+    colors_used <- c(colors_used, colors[short_name])
+  }
+  legend("topright",
+    legend = short_names, col = colors_used,
+    lty = 1, lwd = 2, cex = 1
+  )
+}
+
+pfprFigure()
+pdf("PRbypop_.pdf", width = 10, height = 5)
+pfprFigure()
+a <- dev.off()
 ```
 
