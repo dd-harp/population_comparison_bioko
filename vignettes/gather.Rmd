@@ -85,11 +85,11 @@ by design.
    households, not 100%. The missing 12% isn't geographically biased. It's from people not
    being home when they checked several times. People tend to move seasonally for work,
    so undercounting people in houses is less of an undercount for the actual number of
-   people. We chose to use the data as is. For the other datasets, they are public goods,
-   so we don't see bias.
+   people. We chose to use the data as is.
 
 7. Describe and give sources for any other data inputs. - There is a shapefile for
-   Bioko island, constructed by the island itself. We use this to define island boundaries.
+   Bioko island, constructed by island administration. We could equally well use
+   the GADM shapefile for Equatorial Guinea. We use this to define island boundaries.
    We noticed that the island boundaries for LandScan and WorldPop had more area near
    the Southwest shoreline. It was less than one percent, and we went with the Bioko map
    because it is supported by GPS coordinates of houses.
@@ -114,18 +114,17 @@ by design.
     repository as "gofr_comparison.pdf."
     
 12. Provide results of an evaluation of model performance. -
-    This, too, seems about linear models. We did do some sensitivity analysis of the metrics
-    by shifting grids a little North or South. This work is in the supplement section about
-    map comparison.
+    Contained in the paper's results section.
 
-13. Describe methods of calculating uncertainty of the estimates. The point of this paper
-    is that it's very hard for the people who make the maps to estimate uncertainty.
-    Our premise is that the gold standard data lacks uncertainty. We could have guessed
-    how much undercounting really happened, but we didn't approach that statistically.
-    
-14. State how analytic or statistical source code can be accessed. -
-    https://github.com/dd-harp/population_comparison_bioko
-    
+13. Describe methods of calculating uncertainty of the estimates. - There is a section
+    of the supplement that looks at uncertainty in point estimates due to
+    exact grid location. Each gridded map serves as a realization of a population.
+    The map comparison is a demonstration of uncertainty.
+
+14. State how analytic or statistical source code can be accessed. - The
+    code is in a public repository at this web address:
+    https://github.com/dd-harp/population_comparison_bioko.
+
 15. Provide published estimates in a file from which it can be extracted. -
     These are on the github, for the tables. They are in the vignettes directory
     under summary_statistics.csv, gofr_table.csv, and accuracy.csv.
